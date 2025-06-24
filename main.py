@@ -28,6 +28,7 @@ class Game:
             
         self.current_room = self.rooms[self.current_room_id]
         self.find_safe_spawn_point()
+        self.player.glitch_energy = 100  # Start with full energy
     
     def handle_events(self):
         for event in pygame.event.get():
@@ -181,6 +182,9 @@ class Game:
         
         # Apply screen offset for glitch effect
         self.screen.blit(temp_surface, (screen_offset_x, screen_offset_y))
+        
+        # Draw inventory overlay (not affected by glitch effects)
+        self.player.draw_inventory(self.screen)
         
         # Draw UI
         self.draw_ui()

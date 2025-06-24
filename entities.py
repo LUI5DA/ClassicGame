@@ -25,10 +25,16 @@ class Player:
         self.against_wall = False
         self.jump_count = 0
         self.max_jumps = 2  # Double jump
-        self.glitch_energy = 0
-        self.max_glitch_energy = 100
         self.phase_timer = 0
         self.teleport_cooldown = 0
+        
+        # Inventory system - crystal-based abilities
+        self.inventory = {
+            'glitch_crystals': 0,
+            'phase_crystals': 2,  # Start with 2 for testing
+            'teleport_crystals': 2  # Start with 2 for testing
+        }
+        self.inventory_open = False
         
     def update(self, keys, walls):
         # Handle input
@@ -39,30 +45,36 @@ class Player:
         else:
             self.vel_x *= FRICTION
             
-        # Glitch abilities
-        if keys[pygame.K_q] and not hasattr(self, '_q_pressed'):
-            self.glitch_phase()
-            self._q_pressed = True
-        elif not keys[pygame.K_q]:
+        # Crystal-based abilities
+        if keys[pygame.K_q]:
+            if not hasattr(self, '_q_pressed') or not self._q_pressed:
+                if self.inventory['phase_crystals'] > 0:
+                    self.use_phase_crystal()
+                    print(f"Phase crystal used! {self.inventory['phase_crystals']} remaining")
+                else:
+                    print("No phase crystals! Collect glitch crystals first.")
+                self._q_pressed = True
+        else:
             self._q_pressed = False
             
-        if keys[pygame.K_e] and not hasattr(self, '_e_pressed'):
-            # Teleport in movement direction
-            teleport_distance = 80
-            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-                self.glitch_teleport(self.x - teleport_distance, self.y, walls)
-            elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-                self.glitch_teleport(self.x + teleport_distance, self.y, walls)
-            elif keys[pygame.K_UP] or keys[pygame.K_w]:
-                self.glitch_teleport(self.x, self.y - teleport_distance, walls)
-            elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
-                self.glitch_teleport(self.x, self.y + teleport_distance, walls)
-            else:
-                # Default teleport forward
-                self.glitch_teleport(self.x + teleport_distance, self.y, walls)
-            self._e_pressed = True
-        elif not keys[pygame.K_e]:
+        if keys[pygame.K_e]:
+            if not hasattr(self, '_e_pressed') or not self._e_pressed:
+                if self.inventory['teleport_crystals'] > 0:
+                    self.use_teleport_crystal()
+                    print(f"Teleport crystal used! {self.inventory['teleport_crystals']} remaining")
+                else:
+                    print("No teleport crystals! Collect glitch crystals first.")
+                self._e_pressed = True
+        else:
             self._e_pressed = False
+            
+        # Inventory toggle
+        if keys[pygame.K_i]:
+            if not hasattr(self, '_i_pressed') or not self._i_pressed:
+                self.inventory_open = not self.inventory_open
+                self._i_pressed = True
+        else:
+            self._i_pressed = False
             
         # Jumping (ground jump or double jump)
         if (keys[pygame.K_UP] or keys[pygame.K_w] or keys[pygame.K_SPACE]) and self.can_jump:
@@ -147,10 +159,6 @@ class Player:
             self.phase_timer -= 1
         if self.teleport_cooldown > 0:
             self.teleport_cooldown -= 1
-            
-        # Regenerate glitch energy slowly
-        if self.glitch_energy < self.max_glitch_energy:
-            self.glitch_energy += 0.2
     
     def draw(self, screen):
         color = self.color
@@ -172,59 +180,140 @@ class Player:
             temp_surface.set_alpha(alpha)
             temp_surface.fill(color)
             screen.blit(temp_surface, (self.x, self.y))
+            # Add phase effect border
+            pygame.draw.rect(screen, GLITCH_PINK, (self.x - 2, self.y - 2, self.width + 4, self.height + 4), 2)
         else:
             pygame.draw.rect(screen, color, (self.x, self.y, self.width, self.height))
+            
+        # Phase timer indicator
+        if self.phase_timer > 0:
+            timer_width = 40
+            timer_height = 3
+            timer_x = self.x - 8
+            timer_y = self.y - 18
+            
+            # Background
+            pygame.draw.rect(screen, (30, 30, 30), (timer_x, timer_y, timer_width, timer_height))
+            # Timer bar
+            remaining = int((self.phase_timer / 120) * timer_width)
+            pygame.draw.rect(screen, GLITCH_PINK, (timer_x, timer_y, remaining, timer_height))
         
         # Draw jump indicator
         if self.jump_count > 0 and not self.on_ground:
             for i in range(self.jump_count):
                 pygame.draw.circle(screen, YELLOW, (int(self.x + 5 + i * 8), int(self.y - 5)), 3)
                 
-        # Draw glitch energy bar
-        if self.glitch_energy > 0:
-            bar_width = 30
-            bar_height = 4
-            bar_x = self.x - 3
-            bar_y = self.y - 10
+        # Draw crystal count indicators
+        if self.inventory['teleport_crystals'] > 0 or self.inventory['phase_crystals'] > 0:
+            # Teleport crystals (pink dots)
+            if self.inventory['teleport_crystals'] > 0:
+                for i in range(min(self.inventory['teleport_crystals'], 5)):
+                    pygame.draw.circle(screen, GLITCH_PINK, (int(self.x + 5 + i * 8), int(self.y - 8)), 3)
             
-            # Background
-            pygame.draw.rect(screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
-            # Energy
-            energy_width = int((self.glitch_energy / self.max_glitch_energy) * bar_width)
-            pygame.draw.rect(screen, GLITCH_PINK, (bar_x, bar_y, energy_width, bar_height))
+            # Phase crystals (blue dots)
+            if self.inventory['phase_crystals'] > 0:
+                for i in range(min(self.inventory['phase_crystals'], 5)):
+                    pygame.draw.circle(screen, BLUE, (int(self.x + 5 + i * 8), int(self.y - 18)), 3)
         
     def activate_glitch(self):
         self.glitch_timer = 60
-        self.glitch_energy = min(self.max_glitch_energy, self.glitch_energy + 30)
+        # Add crystals to inventory
+        self.inventory['glitch_crystals'] += 1
+        # Convert to usable crystals randomly
+        if random.randint(0, 1) == 0:
+            self.inventory['teleport_crystals'] += 1
+            print("Gained teleport crystal!")
+        else:
+            self.inventory['phase_crystals'] += 1
+            print("Gained phase crystal!")
         # Glitch jump boost
         if not self.on_ground:
             self.vel_y = JUMP_STRENGTH * 0.7
             self.jump_count = 0  # Reset jumps
             
-    def glitch_teleport(self, target_x, target_y, walls):
-        """Teleport to target position if enough energy"""
-        if self.glitch_energy >= 40 and self.teleport_cooldown <= 0:
-            # Check if target position is valid (not in wall)
-            target_rect = pygame.Rect(target_x, target_y, self.width, self.height)
-            collision = any(wall.colliderect(target_rect) for wall in walls)
+    def use_teleport_crystal(self):
+        """Use teleport crystal from inventory"""
+        if self.inventory['teleport_crystals'] > 0 and self.teleport_cooldown <= 0:
+            self.inventory['teleport_crystals'] -= 1
+            teleport_distance = 80
             
-            if not collision:
-                self.x = target_x
-                self.y = target_y
-                self.glitch_energy -= 40
-                self.teleport_cooldown = 60
-                self.glitch_timer = 30
-                return True
-        return False
-        
-    def glitch_phase(self):
-        """Phase through walls for short time"""
-        if self.glitch_energy >= 25 and self.phase_timer <= 0:
-            self.phase_timer = 90  # 1.5 seconds
-            self.glitch_energy -= 25
+            # Determine direction based on velocity or default to right
+            if abs(self.vel_x) > 1:  # Moving horizontally
+                if self.vel_x > 0:  # Moving right
+                    target_x = self.x + teleport_distance
+                    target_y = self.y
+                else:  # Moving left
+                    target_x = self.x - teleport_distance
+                    target_y = self.y
+            elif abs(self.vel_y) > 1:  # Moving vertically
+                if self.vel_y > 0:  # Moving down
+                    target_x = self.x
+                    target_y = self.y + teleport_distance
+                else:  # Moving up
+                    target_x = self.x
+                    target_y = self.y - teleport_distance
+            else:  # Not moving, teleport right
+                target_x = self.x + teleport_distance
+                target_y = self.y
+            
+            # Keep within bounds
+            target_x = max(self.width, min(SCREEN_WIDTH - self.width, target_x))
+            target_y = max(self.height, min(SCREEN_HEIGHT - self.height, target_y))
+            
+            # Teleport to target position
+            self.x = target_x
+            self.y = target_y
+            self.teleport_cooldown = 30
+            self.glitch_timer = 45
+                    
+    def use_phase_crystal(self):
+        """Use phase crystal from inventory"""
+        if self.inventory['phase_crystals'] > 0:
+            self.inventory['phase_crystals'] -= 1
+            self.phase_timer = 120  # 2 seconds
             self.glitch_timer = 30
-            return True
-        return False
+            
+    def draw_inventory(self, screen):
+        """Draw inventory overlay"""
+        if not self.inventory_open:
+            return
+            
+        # Semi-transparent background
+        overlay = pygame.Surface((300, 200))
+        overlay.set_alpha(200)
+        overlay.fill((20, 20, 40))
+        screen.blit(overlay, (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100))
+        
+        # Border
+        pygame.draw.rect(screen, GLITCH_PINK, (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, 300, 200), 3)
+        
+        # Title
+        font = pygame.font.Font(None, 36)
+        title = font.render("INVENTORY", True, WHITE)
+        screen.blit(title, (SCREEN_WIDTH // 2 - 60, SCREEN_HEIGHT // 2 - 85))
+        
+        # Items
+        small_font = pygame.font.Font(None, 24)
+        y_offset = SCREEN_HEIGHT // 2 - 50
+        
+        # Glitch crystals
+        glitch_text = small_font.render(f"Glitch Crystals Collected: {self.inventory['glitch_crystals']}", True, GLITCH_GREEN)
+        screen.blit(glitch_text, (SCREEN_WIDTH // 2 - 130, y_offset))
+        
+        # Teleport crystals
+        teleport_text = small_font.render(f"Teleport Crystals (E): {self.inventory['teleport_crystals']}", True, GLITCH_PINK)
+        screen.blit(teleport_text, (SCREEN_WIDTH // 2 - 130, y_offset + 25))
+        
+        # Phase crystals
+        phase_text = small_font.render(f"Phase Crystals (Q): {self.inventory['phase_crystals']}", True, BLUE)
+        screen.blit(phase_text, (SCREEN_WIDTH // 2 - 130, y_offset + 50))
+        
+        # Instructions
+        help_text = small_font.render("Abilities now require crystals!", True, WHITE)
+        screen.blit(help_text, (SCREEN_WIDTH // 2 - 100, y_offset + 85))
+        
+        close_text = small_font.render("Press I to close", True, WHITE)
+        screen.blit(close_text, (SCREEN_WIDTH // 2 - 60, y_offset + 105))
         
     def take_damage(self):
         if self.invulnerable_timer <= 0:
