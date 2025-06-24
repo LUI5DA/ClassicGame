@@ -4,6 +4,7 @@ import random
 from config import *
 from entities import Player
 from room import Room
+from audio import audio_manager
 
 class Game:
     def __init__(self):
@@ -81,6 +82,7 @@ class Game:
                     if crystal.is_glitch:
                         self.player.activate_glitch()
                         self.add_glitch_effect()
+                    audio_manager.play_sound("crystal")
                         
     def check_key_collection(self):
         player_rect = pygame.Rect(self.player.x, self.player.y, self.player.width, self.player.height)
