@@ -36,6 +36,13 @@ class Player:
         }
         self.inventory_open = False
         
+        # Combat system
+        self.weapon = "knife"  # knife, sword, stick
+        self.attack_timer = 0
+        self.attack_range = 35
+        self.attack_damage = 1
+        self.facing_direction = 1  # 1 = right, -1 = left
+        
     def update(self, keys, walls):
         # Handle input
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
@@ -75,6 +82,14 @@ class Player:
                 self._i_pressed = True
         else:
             self._i_pressed = False
+            
+        # Combat - X key to attack
+        if keys[pygame.K_x]:
+            if not hasattr(self, '_x_pressed') or not self._x_pressed:
+                self.attack()
+                self._x_pressed = True
+        else:
+            self._x_pressed = False
             
         # Jumping (ground jump or double jump)
         if (keys[pygame.K_UP] or keys[pygame.K_w] or keys[pygame.K_SPACE]) and self.can_jump:
@@ -159,6 +174,14 @@ class Player:
             self.phase_timer -= 1
         if self.teleport_cooldown > 0:
             self.teleport_cooldown -= 1
+        if self.attack_timer > 0:
+            self.attack_timer -= 1
+            
+        # Update facing direction based on movement
+        if self.vel_x > 0:
+            self.facing_direction = 1
+        elif self.vel_x < 0:
+            self.facing_direction = -1
     
     def draw(self, screen):
         color = self.color
@@ -321,6 +344,31 @@ class Player:
             self.invulnerable_timer = 120
             return True
         return False
+        
+    def attack(self):
+        """Perform melee attack"""
+        if self.attack_timer <= 0:
+            self.attack_timer = 20  # Attack cooldown
+            return True
+        return False
+        
+    def get_attack_rect(self):
+        """Get attack hitbox rectangle"""
+        if self.attack_timer > 15:  # Only during attack frames
+            if self.facing_direction == 1:  # Facing right
+                return pygame.Rect(self.x + self.width, self.y, self.attack_range, self.height)
+            else:  # Facing left
+                return pygame.Rect(self.x - self.attack_range, self.y, self.attack_range, self.height)
+        return None
+        
+    def get_weapon_stats(self):
+        """Get current weapon stats"""
+        weapons = {
+            "knife": {"damage": 1, "range": 25, "speed": 15},
+            "sword": {"damage": 2, "range": 40, "speed": 25},
+            "stick": {"damage": 1, "range": 35, "speed": 20}
+        }
+        return weapons.get(self.weapon, weapons["knife"])
 
 class Crystal:
     def __init__(self, x, y, is_glitch=False):
@@ -356,6 +404,9 @@ class Enemy:
         self.type = enemy_type
         self.direction = random.choice([-1, 1])
         self.move_timer = 0
+        self.health = 2
+        self.max_health = 2
+        self.damage_timer = 0
         
     def update(self, walls, player):
         if self.type == "patrol":
@@ -385,10 +436,35 @@ class Enemy:
                 elif player.y < self.y:
                     self.y -= self.speed * 0.7
                     
+        # Update damage timer
+        if self.damage_timer > 0:
+            self.damage_timer -= 1
+                    
     def draw(self, screen):
-        pygame.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
+        # Flash red when damaged
+        color = WHITE if self.damage_timer > 0 else self.color
+        pygame.draw.rect(screen, color, (self.x, self.y, self.width, self.height))
         pygame.draw.circle(screen, WHITE, (int(self.x + 5), int(self.y + 5)), 2)
         pygame.draw.circle(screen, WHITE, (int(self.x + 15), int(self.y + 5)), 2)
+        
+        # Health bar
+        if self.health < self.max_health:
+            bar_width = self.width
+            bar_height = 3
+            bar_x = self.x
+            bar_y = self.y - 8
+            
+            # Background
+            pygame.draw.rect(screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
+            # Health
+            health_width = int((self.health / self.max_health) * bar_width)
+            pygame.draw.rect(screen, RED, (bar_x, bar_y, health_width, bar_height))
+            
+    def take_damage(self, damage):
+        """Take damage and return True if enemy dies"""
+        self.health -= damage
+        self.damage_timer = 10
+        return self.health <= 0
 
 class Key:
     def __init__(self, x, y):

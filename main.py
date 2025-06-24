@@ -67,6 +67,7 @@ class Game:
         self.check_door_unlocking()
         self.check_enemy_collisions()
         self.check_falling_rock_collisions()
+        self.check_combat()
                         
     def check_crystal_collection(self):
         player_rect = pygame.Rect(self.player.x, self.player.y, self.player.width, self.player.height)
@@ -112,6 +113,20 @@ class Game:
                 if self.player.take_damage():
                     if self.player.health <= 0:
                         self.game_over = True
+                        
+    def check_combat(self):
+        """Check for player attacks hitting enemies"""
+        attack_rect = self.player.get_attack_rect()
+        if attack_rect:
+            for enemy in self.current_room.enemies[:]:
+                enemy_rect = pygame.Rect(enemy.x, enemy.y, enemy.width, enemy.height)
+                if attack_rect.colliderect(enemy_rect):
+                    weapon_stats = self.player.get_weapon_stats()
+                    print(f"Hit enemy! Damage: {weapon_stats['damage']}, Enemy health: {enemy.health}")
+                    if enemy.take_damage(weapon_stats["damage"]):
+                        print("Enemy killed!")
+                        self.current_room.enemies.remove(enemy)
+                        self.score += 5  # Bonus points for killing enemies
                         
     def find_safe_spawn_point(self):
         open_spaces = []
@@ -206,7 +221,7 @@ class Game:
             keys_text = font.render(f"Keys: {self.player.keys}", True, WHITE)
             cave_type = ["Cellular", "Perlin", "Maze", "Cavern", "Mixed"][self.current_room_id % 5]
             glitch_energy = int(self.player.glitch_energy)
-            help_text = small_font.render(f"R: Next Room | AD: Move | W/SPACE: Jump | Q: Phase | E: Teleport", True, WHITE)
+            help_text = small_font.render(f"R: Next Room | AD: Move | W/SPACE: Jump | Q: Phase | E: Teleport | X: Attack", True, WHITE)
             glitch_text = small_font.render(f"Glitch Energy: {glitch_energy}/100 | Cave: {cave_type}", True, GLITCH_PINK)
             
             self.screen.blit(score_text, (10, 10))
