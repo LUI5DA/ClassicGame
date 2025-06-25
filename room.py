@@ -127,22 +127,10 @@ class Room:
             self.crystals.append(Crystal(x, y, is_glitch))
             open_spaces.remove((x, y))
         
-        # Place enemies
-        enemy_count = min(1 + (self.id // 2), len(open_spaces) // 4)
-        if enemy_count > 0 and open_spaces:
-            enemy_positions = random.sample(open_spaces, min(enemy_count, len(open_spaces)))
-            for i, (x, y) in enumerate(enemy_positions):
-                enemy_type = "chaser" if i % 3 == 0 else "patrol"
-                self.enemies.append(Enemy(x, y, enemy_type))
-                open_spaces.remove((x, y))
-        
-        # Place keys and doors
-        if self.id > 0 and len(open_spaces) >= 2:
-            key_pos = random.choice(open_spaces)
-            self.keys.append(Key(key_pos[0], key_pos[1]))
-            open_spaces.remove(key_pos)
-            
-            door_placed = False
+        # Place door first (in safe area)
+        door_placed = False
+        door_position = None
+        if len(open_spaces) >= 2:
             attempts = 0
             while not door_placed and attempts < 20:
                 x = random.randint(2, CAVE_WIDTH - 3) * TILE_SIZE
@@ -153,18 +141,55 @@ class Room:
                 
                 if not collision:
                     self.doors.append(Door(x, y, TILE_SIZE * 2, TILE_SIZE))
+                    door_position = (x + TILE_SIZE, y + TILE_SIZE//2)  # Door center
                     door_placed = True
                 attempts += 1
                 
-        # Add boss to certain rooms
-        if self.id % 3 == 2:  # Every 3rd room has a boss
+            # If door placement failed, force create space
+            if not door_placed:
+                x = CAVE_WIDTH // 2 * TILE_SIZE
+                y = (CAVE_HEIGHT - 2) * TILE_SIZE
+                self.doors.append(Door(x, y, TILE_SIZE * 2, TILE_SIZE))
+                door_position = (x + TILE_SIZE, y + TILE_SIZE//2)
+                print(f"Forced door placement in room {self.id}")
+        
+        # Place enemies strategically
+        enemy_count = min(1 + (self.id // 2), len(open_spaces) // 4)
+        enemy_positions = []
+        if enemy_count > 0 and open_spaces:
+            selected_positions = random.sample(open_spaces, min(enemy_count, len(open_spaces)))
+            for i, (x, y) in enumerate(selected_positions):
+                enemy_type = "chaser" if i % 3 == 0 else "patrol"
+                self.enemies.append(Enemy(x, y, enemy_type))
+                enemy_positions.append((x, y))
+                open_spaces.remove((x, y))
+        
+        # Place key strategically (far from door, near enemies/traps)
+        if door_position and open_spaces:
+            key_pos = self.find_strategic_key_position(open_spaces, door_position, enemy_positions)
+            self.keys.append(Key(key_pos[0], key_pos[1]))
+            open_spaces.remove(key_pos)
+                
+        # Add boss to certain rooms (but not first room)
+        if self.id > 0 and self.id % 3 == 2:  # Every 3rd room has a boss
             self.add_boss()
             
-        # Place falling rocks and moving platforms
+        # Place falling rocks and moving platforms (near key if possible)
         if self.id > 1:
+            key_pos = None
+            if self.keys:
+                key_pos = (self.keys[0].x, self.keys[0].y)
+                
             for _ in range(random.randint(1, 3)):
                 if open_spaces:
-                    pos = random.choice(open_spaces)
+                    # Try to place rocks near key for extra challenge
+                    if key_pos and random.randint(0, 1) == 0:
+                        nearby_spaces = [pos for pos in open_spaces 
+                                       if ((pos[0] - key_pos[0])**2 + (pos[1] - key_pos[1])**2)**0.5 < 150]
+                        pos = random.choice(nearby_spaces) if nearby_spaces else random.choice(open_spaces)
+                    else:
+                        pos = random.choice(open_spaces)
+                        
                     rock_y = pos[1] - random.randint(100, 200)
                     if rock_y > 0:
                         self.falling_rocks.append(FallingRock(pos[0], rock_y))
@@ -203,6 +228,41 @@ class Room:
                 self.bosses.append(Boss(world_x, world_y))
                 break
                 
+    def find_strategic_key_position(self, open_spaces, door_position, enemy_positions):
+        """Find key position that's far from door and near enemies/traps"""
+        best_pos = None
+        best_score = -1
+        
+        for pos in open_spaces:
+            score = 0
+            
+            # Distance from door (farther = better)
+            door_distance = ((pos[0] - door_position[0])**2 + (pos[1] - door_position[1])**2)**0.5
+            score += door_distance / 100  # Normalize distance
+            
+            # Proximity to enemies (closer = better)
+            if enemy_positions:
+                min_enemy_distance = min(
+                    ((pos[0] - enemy_pos[0])**2 + (pos[1] - enemy_pos[1])**2)**0.5 
+                    for enemy_pos in enemy_positions
+                )
+                # Closer to enemies = higher score (inverse relationship)
+                score += max(0, 200 - min_enemy_distance) / 50
+            
+            # Prefer corners and edges (more dangerous)
+            edge_bonus = 0
+            if pos[0] < TILE_SIZE * 4 or pos[0] > SCREEN_WIDTH - TILE_SIZE * 4:
+                edge_bonus += 1
+            if pos[1] < TILE_SIZE * 4 or pos[1] > SCREEN_HEIGHT - TILE_SIZE * 4:
+                edge_bonus += 1
+            score += edge_bonus
+            
+            if score > best_score:
+                best_score = score
+                best_pos = pos
+                
+        return best_pos if best_pos else random.choice(open_spaces)
+                
     def get_all_walls(self):
         all_walls = self.walls[:]
         for door in self.doors:
@@ -230,12 +290,8 @@ class Room:
                     if random.randint(0, 10) == 0:
                         pygame.draw.line(screen, tuple(min(255, c + 30) for c in color), 
                                        (rect.left, rect.top), (rect.right, rect.bottom), 1)
-                else:
-                    pygame.draw.rect(screen, CAVE_FLOOR, rect)
-                    
-                    if random.randint(0, 20) == 0:
-                        detail_color = tuple(min(255, c + 10) for c in CAVE_FLOOR)
-                        pygame.draw.circle(screen, detail_color, rect.center, 2)
+                # Don't draw cave floor - let background show through
+                # Only draw walls, leaving open areas transparent
             
     def draw_objects(self, screen):
         for door in self.doors:

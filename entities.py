@@ -28,23 +28,49 @@ class Player:
         self.phase_timer = 0
         self.teleport_cooldown = 0
         
-        # Inventory system - crystal-based abilities
-        self.inventory = {
-            'glitch_crystals': 0,
-            'phase_crystals': 2,  # Start with 2 for testing
-            'teleport_crystals': 2  # Start with 2 for testing
+        # Enhanced inventory system
+        self.inventory_slots = [None] * 12  # 12 item slots
+        self.equipment = {
+            'weapon': {'type': 'knife', 'name': 'Iron Knife', 'damage': 1, 'speed': 15},
+            'armor': None,
+            'amulet': None,
+            'ring': None
         }
         self.inventory_open = False
+        self.crafting_mode = False
+        self.selected_slot = 0
+        
+        # Add starting crystals to inventory
+        self.add_item({'type': 'crystal', 'subtype': 'phase', 'count': 2, 'name': 'Phase Crystal'})
+        self.add_item({'type': 'crystal', 'subtype': 'teleport', 'count': 2, 'name': 'Teleport Crystal'})
         
         # Combat system
-        self.weapon = "knife"  # knife, sword, stick
+        # Remove old weapon system - now handled by equipment
         self.attack_timer = 0
         self.attack_range = 35
         self.attack_damage = 1
         self.facing_direction = 1  # 1 = right, -1 = left
         
+        # Power-up timers
+        self.power_timer = 0
+        self.shield_timer = 0
+        
     def update(self, keys, walls):
-        # Handle input
+        # Inventory toggle (always available)
+        if keys[pygame.K_i]:
+            if not hasattr(self, '_i_pressed') or not self._i_pressed:
+                self.inventory_open = not self.inventory_open
+                self.crafting_mode = False  # Reset crafting mode
+                self._i_pressed = True
+        else:
+            self._i_pressed = False
+            
+        # If inventory is open, only handle inventory controls
+        if self.inventory_open:
+            self.handle_inventory_input(keys)
+            return  # Skip all other player actions
+            
+        # Handle normal gameplay input
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             self.vel_x = -self.speed
         elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
@@ -55,9 +81,9 @@ class Player:
         # Crystal-based abilities
         if keys[pygame.K_q]:
             if not hasattr(self, '_q_pressed') or not self._q_pressed:
-                if self.inventory['phase_crystals'] > 0:
+                if self.count_crystals('phase') > 0:
                     self.use_phase_crystal()
-                    print(f"Phase crystal used! {self.inventory['phase_crystals']} remaining")
+                    print(f"Phase crystal used! {self.count_crystals('phase')} remaining")
                 else:
                     print("No phase crystals! Collect glitch crystals first.")
                 self._q_pressed = True
@@ -66,9 +92,9 @@ class Player:
             
         if keys[pygame.K_e]:
             if not hasattr(self, '_e_pressed') or not self._e_pressed:
-                if self.inventory['teleport_crystals'] > 0:
+                if self.count_crystals('teleport') > 0:
                     self.use_teleport_crystal()
-                    print(f"Teleport crystal used! {self.inventory['teleport_crystals']} remaining")
+                    print(f"Teleport crystal used! {self.count_crystals('teleport')} remaining")
                 else:
                     print("No teleport crystals! Collect glitch crystals first.")
                 self._e_pressed = True
@@ -79,9 +105,56 @@ class Player:
         if keys[pygame.K_i]:
             if not hasattr(self, '_i_pressed') or not self._i_pressed:
                 self.inventory_open = not self.inventory_open
+                self.crafting_mode = False  # Reset crafting mode
                 self._i_pressed = True
         else:
             self._i_pressed = False
+            
+        # Crafting mode toggle (C key when inventory open)
+        if self.inventory_open and keys[pygame.K_c]:
+            if not hasattr(self, '_c_pressed') or not self._c_pressed:
+                self.crafting_mode = not self.crafting_mode
+                self._c_pressed = True
+        else:
+            self._c_pressed = False
+            
+        # Inventory navigation (when inventory open)
+        if self.inventory_open:
+            if keys[pygame.K_LEFT]:
+                if not hasattr(self, '_left_pressed') or not self._left_pressed:
+                    self.selected_slot = (self.selected_slot - 1) % 12
+                    self._left_pressed = True
+            else:
+                self._left_pressed = False
+                
+            if keys[pygame.K_RIGHT]:
+                if not hasattr(self, '_right_pressed') or not self._right_pressed:
+                    self.selected_slot = (self.selected_slot + 1) % 12
+                    self._right_pressed = True
+            else:
+                self._right_pressed = False
+                
+            if keys[pygame.K_UP]:
+                if not hasattr(self, '_up_pressed') or not self._up_pressed:
+                    self.selected_slot = (self.selected_slot - 4) % 12
+                    self._up_pressed = True
+            else:
+                self._up_pressed = False
+                
+            if keys[pygame.K_DOWN]:
+                if not hasattr(self, '_down_pressed') or not self._down_pressed:
+                    self.selected_slot = (self.selected_slot + 4) % 12
+                    self._down_pressed = True
+            else:
+                self._down_pressed = False
+                
+            # Use/equip selected item
+            if keys[pygame.K_RETURN]:
+                if not hasattr(self, '_enter_pressed') or not self._enter_pressed:
+                    self.use_selected_item()
+                    self._enter_pressed = True
+            else:
+                self._enter_pressed = False
             
         # Combat - X key to attack
         if keys[pygame.K_x]:
@@ -178,6 +251,73 @@ class Player:
             self.teleport_cooldown -= 1
         if self.attack_timer > 0:
             self.attack_timer -= 1
+        if self.power_timer > 0:
+            self.power_timer -= 1
+        if self.shield_timer > 0:
+            self.shield_timer -= 1
+            
+    def handle_inventory_input(self, keys):
+        """Handle input when inventory is open"""
+        # Crafting mode toggle
+        if keys[pygame.K_c]:
+            if not hasattr(self, '_c_pressed') or not self._c_pressed:
+                self.crafting_mode = not self.crafting_mode
+                self._c_pressed = True
+        else:
+            self._c_pressed = False
+            
+        # Inventory navigation
+        if keys[pygame.K_LEFT]:
+            if not hasattr(self, '_left_pressed') or not self._left_pressed:
+                self.selected_slot = (self.selected_slot - 1) % 12
+                self._left_pressed = True
+        else:
+            self._left_pressed = False
+            
+        if keys[pygame.K_RIGHT]:
+            if not hasattr(self, '_right_pressed') or not self._right_pressed:
+                self.selected_slot = (self.selected_slot + 1) % 12
+                self._right_pressed = True
+        else:
+            self._right_pressed = False
+            
+        if keys[pygame.K_UP]:
+            if not hasattr(self, '_up_pressed') or not self._up_pressed:
+                self.selected_slot = (self.selected_slot - 4) % 12
+                self._up_pressed = True
+        else:
+            self._up_pressed = False
+            
+        if keys[pygame.K_DOWN]:
+            if not hasattr(self, '_down_pressed') or not self._down_pressed:
+                self.selected_slot = (self.selected_slot + 4) % 12
+                self._down_pressed = True
+        else:
+            self._down_pressed = False
+            
+        # Use/equip selected item
+        if keys[pygame.K_RETURN]:
+            if not hasattr(self, '_enter_pressed') or not self._enter_pressed:
+                self.use_selected_item()
+                self._enter_pressed = True
+        else:
+            self._enter_pressed = False
+            
+        # Crafting in inventory
+        if self.crafting_mode:
+            if keys[pygame.K_1]:
+                if not hasattr(self, '_craft1_pressed') or not self._craft1_pressed:
+                    self.craft_power_crystal()
+                    self._craft1_pressed = True
+            else:
+                self._craft1_pressed = False
+                
+            if keys[pygame.K_2]:
+                if not hasattr(self, '_craft2_pressed') or not self._craft2_pressed:
+                    self.craft_shield_crystal()
+                    self._craft2_pressed = True
+            else:
+                self._craft2_pressed = False
             
         # Update facing direction based on movement
         if self.vel_x > 0:
@@ -229,28 +369,46 @@ class Player:
                 pygame.draw.circle(screen, YELLOW, (int(self.x + 5 + i * 8), int(self.y - 5)), 3)
                 
         # Draw crystal count indicators
-        if self.inventory['teleport_crystals'] > 0 or self.inventory['phase_crystals'] > 0:
+        teleport_count = self.count_crystals('teleport')
+        phase_count = self.count_crystals('phase')
+        if teleport_count > 0 or phase_count > 0:
             # Teleport crystals (pink dots)
-            if self.inventory['teleport_crystals'] > 0:
-                for i in range(min(self.inventory['teleport_crystals'], 5)):
+            if teleport_count > 0:
+                for i in range(min(teleport_count, 5)):
                     pygame.draw.circle(screen, GLITCH_PINK, (int(self.x + 5 + i * 8), int(self.y - 8)), 3)
             
             # Phase crystals (blue dots)
-            if self.inventory['phase_crystals'] > 0:
-                for i in range(min(self.inventory['phase_crystals'], 5)):
+            if phase_count > 0:
+                for i in range(min(phase_count, 5)):
                     pygame.draw.circle(screen, BLUE, (int(self.x + 5 + i * 8), int(self.y - 18)), 3)
+                    
+        # Power-up indicators
+        if self.power_timer > 0:
+            # Power crystal effect - red glow
+            pygame.draw.circle(screen, RED, (int(self.x + self.width + 15), int(self.y + 5)), 6)
+            pygame.draw.circle(screen, YELLOW, (int(self.x + self.width + 15), int(self.y + 5)), 3)
+            
+        if self.shield_timer > 0:
+            # Shield crystal effect - blue glow
+            pygame.draw.circle(screen, BLUE, (int(self.x + self.width + 15), int(self.y + 15)), 6)
+            pygame.draw.circle(screen, WHITE, (int(self.x + self.width + 15), int(self.y + 15)), 3)
         
     def activate_glitch(self):
         self.glitch_timer = 60
-        # Add crystals to inventory
-        self.inventory['glitch_crystals'] += 1
+        # Add glitch crystal to inventory
+        glitch_crystal = {'type': 'crystal', 'subtype': 'glitch', 'count': 1, 'name': 'Glitch Crystal'}
+        self.add_item(glitch_crystal)
+        
         # Convert to usable crystals randomly
         if random.randint(0, 1) == 0:
-            self.inventory['teleport_crystals'] += 1
+            teleport_crystal = {'type': 'crystal', 'subtype': 'teleport', 'count': 1, 'name': 'Teleport Crystal'}
+            self.add_item(teleport_crystal)
             print("Gained teleport crystal!")
         else:
-            self.inventory['phase_crystals'] += 1
+            phase_crystal = {'type': 'crystal', 'subtype': 'phase', 'count': 1, 'name': 'Phase Crystal'}
+            self.add_item(phase_crystal)
             print("Gained phase crystal!")
+            
         # Glitch jump boost
         if not self.on_ground:
             self.vel_y = JUMP_STRENGTH * 0.7
@@ -258,8 +416,7 @@ class Player:
             
     def use_teleport_crystal(self):
         """Use teleport crystal from inventory"""
-        if self.inventory['teleport_crystals'] > 0 and self.teleport_cooldown <= 0:
-            self.inventory['teleport_crystals'] -= 1
+        if self.consume_crystal('teleport') and self.teleport_cooldown <= 0:
             from audio import audio_manager
             audio_manager.play_sound("teleport")
             teleport_distance = 80
@@ -295,56 +452,207 @@ class Player:
                     
     def use_phase_crystal(self):
         """Use phase crystal from inventory"""
-        if self.inventory['phase_crystals'] > 0:
-            self.inventory['phase_crystals'] -= 1
+        if self.consume_crystal('phase'):
             from audio import audio_manager
             audio_manager.play_sound("phase")
             self.phase_timer = 120  # 2 seconds
             self.glitch_timer = 30
             
+    def craft_power_crystal(self):
+        """Craft power crystal: 2 glitch + 1 teleport = 1 power"""
+        if self.count_crystals('glitch') >= 2 and self.count_crystals('teleport') >= 1:
+            for _ in range(2):
+                self.consume_crystal('glitch')
+            self.consume_crystal('teleport')
+            power_crystal = {'type': 'crystal', 'subtype': 'power', 'count': 1, 'name': 'Power Crystal'}
+            self.add_item(power_crystal)
+            print("Crafted Power Crystal! (Double damage for 10 seconds)")
+            from audio import audio_manager
+            audio_manager.play_sound("crystal")
+        else:
+            print("Need: 2 Glitch + 1 Teleport crystals")
+            
+    def craft_shield_crystal(self):
+        """Craft shield crystal: 2 glitch + 1 phase = 1 shield"""
+        if self.count_crystals('glitch') >= 2 and self.count_crystals('phase') >= 1:
+            for _ in range(2):
+                self.consume_crystal('glitch')
+            self.consume_crystal('phase')
+            shield_crystal = {'type': 'crystal', 'subtype': 'shield', 'count': 1, 'name': 'Shield Crystal'}
+            self.add_item(shield_crystal)
+            print("Crafted Shield Crystal! (Invulnerability for 5 seconds)")
+            from audio import audio_manager
+            audio_manager.play_sound("crystal")
+        else:
+            print("Need: 2 Glitch + 1 Phase crystals")
+            
+    def use_power_crystal(self):
+        """Use power crystal for double damage"""
+        if self.consume_crystal('power'):
+            self.power_timer = 600  # 10 seconds
+            print("Power Crystal activated! Double damage for 10 seconds!")
+            from audio import audio_manager
+            audio_manager.play_sound("glitch")
+            
+    def use_shield_crystal(self):
+        """Use shield crystal for invulnerability"""
+        if self.consume_crystal('shield'):
+            self.shield_timer = 300  # 5 seconds
+            print("Shield Crystal activated! Invulnerable for 5 seconds!")
+            from audio import audio_manager
+            audio_manager.play_sound("glitch")
+            
+    def count_crystals(self, crystal_type):
+        """Count crystals of specified type"""
+        count = 0
+        for slot in self.inventory_slots:
+            if slot and slot['type'] == 'crystal' and slot['subtype'] == crystal_type:
+                count += slot['count']
+        return count
+            
     def draw_inventory(self, screen):
-        """Draw inventory overlay"""
+        """Draw enhanced inventory overlay"""
         if not self.inventory_open:
             return
             
+        # Larger inventory window
+        inv_width, inv_height = 500, 400
+        inv_x = SCREEN_WIDTH // 2 - inv_width // 2
+        inv_y = SCREEN_HEIGHT // 2 - inv_height // 2
+        
         # Semi-transparent background
-        overlay = pygame.Surface((300, 200))
-        overlay.set_alpha(200)
-        overlay.fill((20, 20, 40))
-        screen.blit(overlay, (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100))
+        overlay = pygame.Surface((inv_width, inv_height))
+        overlay.set_alpha(220)
+        overlay.fill((15, 15, 30))
+        screen.blit(overlay, (inv_x, inv_y))
         
         # Border
-        pygame.draw.rect(screen, GLITCH_PINK, (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, 300, 200), 3)
+        pygame.draw.rect(screen, GLITCH_PINK, (inv_x, inv_y, inv_width, inv_height), 3)
         
         # Title
-        font = pygame.font.Font(None, 36)
+        font = pygame.font.Font(None, 32)
         title = font.render("INVENTORY", True, WHITE)
-        screen.blit(title, (SCREEN_WIDTH // 2 - 60, SCREEN_HEIGHT // 2 - 85))
+        screen.blit(title, (inv_x + 20, inv_y + 10))
         
-        # Items
-        small_font = pygame.font.Font(None, 24)
-        y_offset = SCREEN_HEIGHT // 2 - 50
+        small_font = pygame.font.Font(None, 18)
         
-        # Glitch crystals
-        glitch_text = small_font.render(f"Glitch Crystals Collected: {self.inventory['glitch_crystals']}", True, GLITCH_GREEN)
-        screen.blit(glitch_text, (SCREEN_WIDTH // 2 - 130, y_offset))
+        # Equipment slots (left side)
+        eq_x, eq_y = inv_x + 20, inv_y + 50
+        eq_font = pygame.font.Font(None, 20)
         
-        # Teleport crystals
-        teleport_text = small_font.render(f"Teleport Crystals (E): {self.inventory['teleport_crystals']}", True, GLITCH_PINK)
-        screen.blit(teleport_text, (SCREEN_WIDTH // 2 - 130, y_offset + 25))
+        # Equipment title
+        eq_title = eq_font.render("EQUIPMENT", True, YELLOW)
+        screen.blit(eq_title, (eq_x, eq_y))
         
-        # Phase crystals
-        phase_text = small_font.render(f"Phase Crystals (Q): {self.inventory['phase_crystals']}", True, BLUE)
-        screen.blit(phase_text, (SCREEN_WIDTH // 2 - 130, y_offset + 50))
+        # Draw equipment slots
+        slot_size = 40
+        equipment_slots = [
+            ('weapon', 'WEAPON', RED),
+            ('armor', 'ARMOR', BLUE),
+            ('amulet', 'AMULET', GLITCH_PINK),
+            ('ring', 'RING', YELLOW)
+        ]
+        
+        for i, (slot_type, label, color) in enumerate(equipment_slots):
+            slot_x = eq_x
+            slot_y = eq_y + 30 + i * 50
+            
+            # Slot background
+            pygame.draw.rect(screen, (40, 40, 40), (slot_x, slot_y, slot_size, slot_size))
+            pygame.draw.rect(screen, color, (slot_x, slot_y, slot_size, slot_size), 2)
+            
+            # Equipment item
+            item = self.equipment[slot_type]
+            if item:
+                # Draw item (simplified as colored square)
+                pygame.draw.rect(screen, color, (slot_x + 5, slot_y + 5, slot_size - 10, slot_size - 10))
+                # Item name
+                name_text = small_font.render(item['name'][:8], True, WHITE)
+                screen.blit(name_text, (slot_x + slot_size + 5, slot_y + 5))
+            else:
+                # Empty slot label
+                label_text = small_font.render(label, True, (100, 100, 100))
+                screen.blit(label_text, (slot_x + slot_size + 5, slot_y + 15))
+        
+        # Inventory grid (right side)
+        grid_x = inv_x + 250
+        grid_y = inv_y + 50
+        
+        # Inventory title
+        inv_title = eq_font.render("ITEMS (12 slots)", True, WHITE)
+        screen.blit(inv_title, (grid_x, grid_y))
+        
+        # Draw inventory grid (3x4)
+        slot_size = 45
+        for i in range(12):
+            row = i // 4
+            col = i % 4
+            slot_x = grid_x + col * (slot_size + 5)
+            slot_y = grid_y + 30 + row * (slot_size + 5)
+            
+            # Slot background
+            if i == self.selected_slot:
+                pygame.draw.rect(screen, GLITCH_PINK, (slot_x - 2, slot_y - 2, slot_size + 4, slot_size + 4), 3)
+            
+            pygame.draw.rect(screen, (30, 30, 30), (slot_x, slot_y, slot_size, slot_size))
+            pygame.draw.rect(screen, (80, 80, 80), (slot_x, slot_y, slot_size, slot_size), 1)
+            
+            # Item in slot
+            item = self.inventory_slots[i]
+            if item:
+                if item['type'] == 'crystal':
+                    colors = {
+                        'glitch': GLITCH_GREEN,
+                        'teleport': GLITCH_PINK,
+                        'phase': BLUE,
+                        'power': YELLOW,
+                        'shield': WHITE
+                    }
+                    color = colors.get(item['subtype'], WHITE)
+                    pygame.draw.circle(screen, color, (slot_x + slot_size//2, slot_y + slot_size//2), 15)
+                    
+                    # Count
+                    if item['count'] > 1:
+                        count_text = small_font.render(str(item['count']), True, WHITE)
+                        screen.blit(count_text, (slot_x + slot_size - 15, slot_y + slot_size - 15))
+                        
+                elif item['type'] in ['weapon', 'armor']:
+                    color = RED if item['type'] == 'weapon' else BLUE
+                    pygame.draw.rect(screen, color, (slot_x + 5, slot_y + 5, slot_size - 10, slot_size - 10))
         
         # Instructions
-        help_text = small_font.render("Abilities now require crystals!", True, WHITE)
-        screen.blit(help_text, (SCREEN_WIDTH // 2 - 100, y_offset + 85))
+        inst_y = inv_y + inv_height - 80
+        instructions = [
+            "Arrow Keys: Navigate | Enter: Use/Equip",
+            "C: Crafting Mode | I: Close"
+        ]
         
-        close_text = small_font.render("Press I to close", True, WHITE)
-        screen.blit(close_text, (SCREEN_WIDTH // 2 - 60, y_offset + 105))
+        for i, instruction in enumerate(instructions):
+            inst_text = small_font.render(instruction, True, WHITE)
+            screen.blit(inst_text, (inv_x + 20, inst_y + i * 20))
+            
+        # Selected item info
+        if self.inventory_slots[self.selected_slot]:
+            item = self.inventory_slots[self.selected_slot]
+            info_text = small_font.render(f"Selected: {item['name']}", True, YELLOW)
+            screen.blit(info_text, (inv_x + 20, inst_y + 40))
+            
+        # Crafting recipes (if in crafting mode)
+        if self.crafting_mode:
+            craft_y = inv_y + 250
+            craft_title = eq_font.render("CRAFTING RECIPES:", True, GLITCH_PINK)
+            screen.blit(craft_title, (inv_x + 20, craft_y))
+            
+            recipe1 = small_font.render("1. Power Crystal: 2 Glitch + 1 Teleport", True, YELLOW)
+            screen.blit(recipe1, (inv_x + 20, craft_y + 25))
+            
+            recipe2 = small_font.render("2. Shield Crystal: 2 Glitch + 1 Phase", True, WHITE)
+            screen.blit(recipe2, (inv_x + 20, craft_y + 45))
         
     def take_damage(self):
+        if self.shield_timer > 0:
+            print("Shield blocked damage!")
+            return False  # Shield blocks damage
         if self.invulnerable_timer <= 0:
             self.health -= 1
             self.invulnerable_timer = 120
@@ -355,7 +663,8 @@ class Player:
         """Perform melee attack"""
         if self.attack_timer <= 0:
             self.attack_timer = 20  # Attack cooldown
-            print(f"Player attacks with {self.weapon}!")
+            weapon_name = self.equipment['weapon']['name'] if self.equipment['weapon'] else 'Fists'
+            print(f"Player attacks with {weapon_name}!")
             from audio import audio_manager
             audio_manager.play_sound("attack")
             return True
@@ -372,14 +681,87 @@ class Player:
         
     def get_weapon_stats(self):
         """Get current weapon stats"""
-        weapons = {
-            "knife": {"damage": 1, "range": 25, "speed": 15},
-            "sword": {"damage": 2, "range": 40, "speed": 25},
-            "stick": {"damage": 1, "range": 35, "speed": 20}
+        weapon = self.equipment['weapon']
+        if not weapon:
+            weapon = {'damage': 1, 'range': 25, 'speed': 15}  # Default fists
+            
+        stats = {
+            'damage': weapon.get('damage', 1),
+            'range': weapon.get('range', 25),
+            'speed': weapon.get('speed', 15)
         }
-        return weapons.get(self.weapon, weapons["knife"])
+        
+        # Double damage if power crystal is active
+        if self.power_timer > 0:
+            stats['damage'] *= 2
+        return stats
+        
+    def add_item(self, item):
+        """Add item to inventory"""
+        # Try to stack crystals
+        if item['type'] == 'crystal':
+            for slot in self.inventory_slots:
+                if slot and slot['type'] == 'crystal' and slot['subtype'] == item['subtype']:
+                    slot['count'] += item['count']
+                    return True
+                    
+        # Find empty slot
+        for i, slot in enumerate(self.inventory_slots):
+            if slot is None:
+                self.inventory_slots[i] = item
+                return True
+        return False  # Inventory full
+        
+    def consume_crystal(self, crystal_type):
+        """Consume one crystal of specified type"""
+        for slot in self.inventory_slots:
+            if slot and slot['type'] == 'crystal' and slot['subtype'] == crystal_type:
+                slot['count'] -= 1
+                if slot['count'] <= 0:
+                    idx = self.inventory_slots.index(slot)
+                    self.inventory_slots[idx] = None
+                return True
+        return False
+        
+    def use_selected_item(self):
+        """Use or equip the selected inventory item"""
+        item = self.inventory_slots[self.selected_slot]
+        if not item:
+            return
+            
+        if item['type'] == 'crystal':
+            if item['subtype'] == 'teleport':
+                self.use_teleport_crystal()
+            elif item['subtype'] == 'phase':
+                self.use_phase_crystal()
+            elif item['subtype'] == 'power':
+                self.use_power_crystal()
+            elif item['subtype'] == 'shield':
+                self.use_shield_crystal()
+        elif item['type'] == 'weapon':
+            self.equip_weapon(item)
+        elif item['type'] == 'armor':
+            self.equip_armor(item)
+            
+    def equip_weapon(self, weapon):
+        """Equip a weapon"""
+        old_weapon = self.equipment['weapon']
+        self.equipment['weapon'] = weapon
+        self.inventory_slots[self.selected_slot] = old_weapon
+        print(f"Equipped {weapon['name']}!")
+        
+    def equip_armor(self, armor):
+        """Equip armor"""
+        old_armor = self.equipment['armor']
+        self.equipment['armor'] = armor
+        self.inventory_slots[self.selected_slot] = old_armor
+        print(f"Equipped {armor['name']}!")
 
 class Crystal:
+    # Class variables for shared images
+    crystal_image = None
+    glitch_crystal_image = None
+    
     def __init__(self, x, y, is_glitch=False):
         self.x = x
         self.y = y
@@ -388,21 +770,53 @@ class Crystal:
         self.collected = False
         self.is_glitch = is_glitch
         
+        # Load images if not already loaded
+        if Crystal.crystal_image is None:
+            try:
+                Crystal.crystal_image = pygame.image.load("crystal.png")
+                Crystal.crystal_image = pygame.transform.scale(Crystal.crystal_image, (32, 32))
+                print("Crystal image loaded")
+            except:
+                print("Could not load crystal.png")
+                Crystal.crystal_image = False
+                
+        if Crystal.glitch_crystal_image is None:
+            try:
+                Crystal.glitch_crystal_image = pygame.image.load("gllitch_crystal.png")
+                Crystal.glitch_crystal_image = pygame.transform.scale(Crystal.glitch_crystal_image, (32, 32))
+                print("Glitch crystal image loaded")
+            except:
+                print("Could not load gllitch_crystal.png")
+                Crystal.glitch_crystal_image = False
+        
     def update(self):
         self.glow = (math.sin(pygame.time.get_ticks() * 0.01) + 1) * 50
         
     def draw(self, screen):
         if not self.collected:
-            if self.is_glitch:
-                colors = [GLITCH_PINK, GLITCH_GREEN, CRYSTAL_BLUE]
-                color = random.choice(colors)
-                pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.size)
+            if self.is_glitch and Crystal.glitch_crystal_image:
+                # Draw glitch crystal image
+                rect = Crystal.glitch_crystal_image.get_rect(center=(int(self.x), int(self.y)))
+                screen.blit(Crystal.glitch_crystal_image, rect)
+            elif not self.is_glitch and Crystal.crystal_image:
+                # Draw normal crystal image
+                rect = Crystal.crystal_image.get_rect(center=(int(self.x), int(self.y)))
+                screen.blit(Crystal.crystal_image, rect)
             else:
-                glow_color = (100 + self.glow, 150 + self.glow, 255)
-                pygame.draw.circle(screen, glow_color, (int(self.x), int(self.y)), self.size)
-                pygame.draw.circle(screen, CRYSTAL_BLUE, (int(self.x), int(self.y)), self.size - 4)
+                # Fallback to colored circles if images failed to load
+                if self.is_glitch:
+                    colors = [GLITCH_PINK, GLITCH_GREEN, CRYSTAL_BLUE]
+                    color = random.choice(colors)
+                    pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.size)
+                else:
+                    glow_color = (100 + self.glow, 150 + self.glow, 255)
+                    pygame.draw.circle(screen, glow_color, (int(self.x), int(self.y)), self.size)
+                    pygame.draw.circle(screen, CRYSTAL_BLUE, (int(self.x), int(self.y)), self.size - 4)
 
 class Enemy:
+    # Class variable for shared image
+    enemy_image = None
+    
     def __init__(self, x, y, enemy_type="patrol"):
         self.x = x
         self.y = y
@@ -416,6 +830,16 @@ class Enemy:
         self.health = 2
         self.max_health = 2
         self.damage_timer = 0
+        
+        # Load enemy image if not already loaded
+        if Enemy.enemy_image is None:
+            try:
+                Enemy.enemy_image = pygame.image.load("beatle.png")
+                Enemy.enemy_image = pygame.transform.scale(Enemy.enemy_image, (24, 24))
+                print("Enemy image loaded")
+            except:
+                print("Could not load beatle.png")
+                Enemy.enemy_image = False
         
     def update(self, walls, player):
         if self.type == "patrol":
@@ -450,17 +874,29 @@ class Enemy:
             self.damage_timer -= 1
             
     def draw(self, screen):
-        # Flash when damaged
-        color = WHITE if self.damage_timer > 0 else self.color
-        pygame.draw.rect(screen, color, (self.x, self.y, self.width, self.height))
-        pygame.draw.circle(screen, WHITE, (int(self.x + 5), int(self.y + 5)), 2)
-        pygame.draw.circle(screen, WHITE, (int(self.x + 15), int(self.y + 5)), 2)
+        if Enemy.enemy_image:
+            # Draw enemy image
+            image = Enemy.enemy_image
+            if self.damage_timer > 0:
+                # Create white flash effect
+                flash_image = image.copy()
+                flash_image.fill((255, 255, 255, 128), special_flags=pygame.BLEND_RGBA_MULT)
+                image = flash_image
+            
+            rect = image.get_rect(center=(int(self.x + self.width//2), int(self.y + self.height//2)))
+            screen.blit(image, rect)
+        else:
+            # Fallback to colored rectangle if image failed to load
+            color = WHITE if self.damage_timer > 0 else self.color
+            pygame.draw.rect(screen, color, (self.x, self.y, self.width, self.height))
+            pygame.draw.circle(screen, WHITE, (int(self.x + 5), int(self.y + 5)), 2)
+            pygame.draw.circle(screen, WHITE, (int(self.x + 15), int(self.y + 5)), 2)
         
         # Always show health bar above enemy
         bar_width = 30
         bar_height = 4
         bar_x = self.x - 5
-        bar_y = self.y - 12
+        bar_y = self.y - 15  # Moved up slightly for image
         
         # Background (dark gray)
         pygame.draw.rect(screen, (40, 40, 40), (bar_x, bar_y, bar_width, bar_height))
@@ -627,12 +1063,21 @@ class Door:
         self.rect = pygame.Rect(x, y, width, height)
         self.keys_required = keys_required
         self.locked = True
+        self.can_use = False
         
     def draw(self, screen):
         if self.locked:
             pygame.draw.rect(screen, DOOR_COLOR, self.rect)
             pygame.draw.circle(screen, YELLOW, self.rect.center, 8)
             pygame.draw.circle(screen, DOOR_COLOR, self.rect.center, 5)
+        else:
+            # Unlocked door - different color
+            color = GREEN if hasattr(self, 'can_use') and self.can_use else BLUE
+            pygame.draw.rect(screen, color, self.rect)
+            pygame.draw.circle(screen, WHITE, self.rect.center, 8)
+            if hasattr(self, 'can_use') and self.can_use:
+                # Glowing effect when player can use
+                pygame.draw.rect(screen, WHITE, self.rect, 3)
 
 class FallingRock:
     def __init__(self, x, y):
