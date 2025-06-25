@@ -774,7 +774,7 @@ class Crystal:
         if Crystal.crystal_image is None:
             try:
                 Crystal.crystal_image = pygame.image.load("crystal.png")
-                Crystal.crystal_image = pygame.transform.scale(Crystal.crystal_image, (32, 32))
+                Crystal.crystal_image = pygame.transform.scale(Crystal.crystal_image, (80, 80))
                 print("Crystal image loaded")
             except:
                 print("Could not load crystal.png")
@@ -783,7 +783,7 @@ class Crystal:
         if Crystal.glitch_crystal_image is None:
             try:
                 Crystal.glitch_crystal_image = pygame.image.load("gllitch_crystal.png")
-                Crystal.glitch_crystal_image = pygame.transform.scale(Crystal.glitch_crystal_image, (32, 32))
+                Crystal.glitch_crystal_image = pygame.transform.scale(Crystal.glitch_crystal_image, (80, 80))
                 print("Glitch crystal image loaded")
             except:
                 print("Could not load gllitch_crystal.png")
@@ -835,7 +835,7 @@ class Enemy:
         if Enemy.enemy_image is None:
             try:
                 Enemy.enemy_image = pygame.image.load("beatle.png")
-                Enemy.enemy_image = pygame.transform.scale(Enemy.enemy_image, (24, 24))
+                Enemy.enemy_image = pygame.transform.scale(Enemy.enemy_image, (120, 120))
                 print("Enemy image loaded")
             except:
                 print("Could not load beatle.png")
