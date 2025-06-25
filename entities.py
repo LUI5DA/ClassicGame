@@ -353,26 +353,30 @@ class Player:
         # Draw attack effect when attacking
         if self.attack_timer > 15:  # Only during attack frames
             attack_color = RED
-            if self.facing_direction == 1:  # Right
-                attack_rect = pygame.Rect(self.x + self.width, self.y, self.attack_range, self.height)
-                # Draw attack effect
+            attack_rect = self.get_attack_rect()
+            if attack_rect:
+                # Draw attack effect rectangle
                 pygame.draw.rect(screen, attack_color, attack_rect, 2)
-                # Draw direction indicator
-                pygame.draw.polygon(screen, attack_color, [
-                    (self.x + self.width + 10, self.y + self.height//2 - 10),
-                    (self.x + self.width + 25, self.y + self.height//2),
-                    (self.x + self.width + 10, self.y + self.height//2 + 10)
-                ])
-            else:  # Left
-                attack_rect = pygame.Rect(self.x - self.attack_range, self.y, self.attack_range, self.height)
-                # Draw attack effect
-                pygame.draw.rect(screen, attack_color, attack_rect, 2)
-                # Draw direction indicator
-                pygame.draw.polygon(screen, attack_color, [
-                    (self.x - 10, self.y + self.height//2 - 10),
-                    (self.x - 25, self.y + self.height//2),
-                    (self.x - 10, self.y + self.height//2 + 10)
-                ])
+                
+                # Draw direction indicator based on attack direction
+                if hasattr(self, 'attack_direction'):
+                    dx, dy = self.attack_direction
+                    center_x = self.x + self.width/2
+                    center_y = self.y + self.height/2
+                    
+                    # Normalize for drawing
+                    length = max(0.1, (dx**2 + dy**2)**0.5)
+                    ndx = dx / length * 20  # Scale for arrow
+                    ndy = dy / length * 20
+                    
+                    # Draw arrow in attack direction
+                    end_x = center_x + ndx
+                    end_y = center_y + ndy
+                    pygame.draw.line(screen, attack_color, (center_x, center_y), (end_x, end_y), 2)
+                    
+                    # Arrow head
+                    head_size = 8
+                    pygame.draw.circle(screen, attack_color, (int(end_x), int(end_y)), head_size//2)
             
         # Phase timer indicator
         if self.phase_timer > 0:
@@ -463,6 +467,26 @@ class Player:
             else:  # Not moving, teleport right
                 target_x = self.x + teleport_distance
                 target_y = self.y
+            
+            # Keep within bounds
+            target_x = max(self.width, min(SCREEN_WIDTH - self.width, target_x))
+            target_y = max(self.height, min(SCREEN_HEIGHT - self.height, target_y))
+            
+            # Teleport to target position
+            self.x = target_x
+            self.y = target_y
+            self.teleport_cooldown = 30
+            self.glitch_timer = 45
+            
+    def use_teleport_crystal_directed(self, dx, dy):
+        """Use teleport crystal in a specific direction (for mouse control)"""
+        if self.consume_crystal('teleport') and self.teleport_cooldown <= 0:
+            from audio import audio_manager
+            audio_manager.play_sound("teleport")
+            
+            # Calculate target position
+            target_x = self.x + dx
+            target_y = self.y + dy
             
             # Keep within bounds
             target_x = max(self.width, min(SCREEN_WIDTH - self.width, target_x))
@@ -683,10 +707,18 @@ class Player:
             return True
         return False
         
-    def attack(self):
-        """Perform melee attack"""
+    def attack(self, direction_x=None, direction_y=None):
+        """Perform melee attack, optionally in a specific direction"""
         if self.attack_timer <= 0:
             self.attack_timer = 20  # Attack cooldown
+            
+            # Store attack direction if provided
+            if direction_x is not None and direction_y is not None:
+                self.attack_direction = (direction_x, direction_y)
+            else:
+                # Default to horizontal direction based on facing
+                self.attack_direction = (self.facing_direction, 0)
+                
             weapon_name = self.equipment['weapon']['name'] if self.equipment['weapon'] else 'Fists'
             print(f"Player attacks with {weapon_name}!")
             from audio import audio_manager
@@ -695,12 +727,31 @@ class Player:
         return False
         
     def get_attack_rect(self):
-        """Get attack hitbox rectangle"""
+        """Get attack hitbox rectangle based on attack direction"""
         if self.attack_timer > 15:  # Only during attack frames
-            if self.facing_direction == 1:  # Facing right
-                return pygame.Rect(self.x + self.width, self.y, self.attack_range, self.height)
-            else:  # Facing left
-                return pygame.Rect(self.x - self.attack_range, self.y, self.attack_range, self.height)
+            # Get attack direction (stored during attack)
+            if hasattr(self, 'attack_direction'):
+                dx, dy = self.attack_direction
+                center_x = self.x + self.width/2
+                center_y = self.y + self.height/2
+                
+                # Determine if attack is more horizontal or vertical
+                if abs(dx) > abs(dy):  # More horizontal
+                    if dx > 0:  # Right
+                        return pygame.Rect(self.x + self.width, self.y, self.attack_range, self.height)
+                    else:  # Left
+                        return pygame.Rect(self.x - self.attack_range, self.y, self.attack_range, self.height)
+                else:  # More vertical
+                    if dy > 0:  # Down
+                        return pygame.Rect(self.x, self.y + self.height, self.width, self.attack_range)
+                    else:  # Up
+                        return pygame.Rect(self.x, self.y - self.attack_range, self.width, self.attack_range)
+            else:
+                # Fallback to horizontal direction
+                if self.facing_direction == 1:  # Facing right
+                    return pygame.Rect(self.x + self.width, self.y, self.attack_range, self.height)
+                else:  # Facing left
+                    return pygame.Rect(self.x - self.attack_range, self.y, self.attack_range, self.height)
         return None
         
     def get_weapon_stats(self):

@@ -52,17 +52,36 @@ class Game:
             # Mouse controls
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if not self.player.inventory_open and not self.game_over:
+                    # Get mouse position
+                    mouse_x, mouse_y = pygame.mouse.get_pos()
+                    player_center_x = self.player.x + self.player.width/2
+                    player_center_y = self.player.y + self.player.height/2
+                    
                     if event.button == 1:  # Left click to attack
-                        self.player.attack()
+                        # Calculate direction vector from player to mouse
+                        dx = mouse_x - player_center_x
+                        dy = mouse_y - player_center_y
+                        self.player.attack(dx, dy)
                     elif event.button == 3:  # Right click to teleport
                         if self.player.count_crystals('teleport') > 0:
-                            self.player.use_teleport_crystal()
+                            # Calculate direction vector to mouse
+                            dx = mouse_x - player_center_x
+                            dy = mouse_y - player_center_y
+                            # Normalize and scale
+                            distance = max(1, ((dx**2 + dy**2)**0.5))
+                            dx = dx / distance * 80  # 80 pixels teleport distance
+                            dy = dy / distance * 80
+                            
+                            self.player.use_teleport_crystal_directed(dx, dy)
     
     def update(self):
         if self.game_over:
             return
             
         keys = pygame.key.get_pressed()
+        
+        # We now handle facing direction in the attack method
+            
         self.player.update(keys, self.current_room.get_all_walls())
         
         # If inventory is open, pause game world updates
@@ -186,31 +205,16 @@ class Game:
                         
     def check_combat(self):
         """Check for player attacks hitting enemies"""
-        # Update player facing direction based on closest enemy
-        all_enemies = self.current_room.enemies + self.current_room.bosses
-        if all_enemies:
-            closest_enemy = None
-            min_distance = float('inf')
+        # Update player facing direction based on mouse position when not attacking
+        if self.player.attack_timer <= 0:
+            mouse_x, mouse_y = pygame.mouse.get_pos()
             player_center_x = self.player.x + self.player.width/2
-            player_center_y = self.player.y + self.player.height/2
             
-            for enemy in all_enemies:
-                enemy_center_x = enemy.x + enemy.width/2
-                enemy_center_y = enemy.y + enemy.height/2
-                distance = ((player_center_x - enemy_center_x)**2 + 
-                           (player_center_y - enemy_center_y)**2)**0.5
-                
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_enemy = enemy
-            
-            if closest_enemy:
-                # Set facing direction based on closest enemy
-                enemy_center_x = closest_enemy.x + closest_enemy.width/2
-                if enemy_center_x > player_center_x:
-                    self.player.facing_direction = 1  # Face right
-                else:
-                    self.player.facing_direction = -1  # Face left
+            # Set facing direction based on mouse
+            if mouse_x > player_center_x:
+                self.player.facing_direction = 1  # Face right
+            else:
+                self.player.facing_direction = -1  # Face left
         
         # Normal attack processing
         attack_rect = self.player.get_attack_rect()
@@ -433,7 +437,7 @@ class Game:
                 # Check door status for help text
                 near_door = any(hasattr(door, 'can_use') and door.can_use for door in self.current_room.doors if not door.locked)
                 if near_door:
-                    help_text = small_font.render(f"R: Enter Door | AD: Move | W/SPACE: Jump | Q: Phase | LEFT CLICK: Attack | RIGHT CLICK: Teleport | I: Inventory", True, GREEN)
+                    help_text = small_font.render(f"R: Enter Door | AD: Move | W/SPACE: Jump | Q: Phase | LEFT CLICK: Attack in any direction | RIGHT CLICK: Teleport to cursor | I: Inventory", True, GREEN)
                 else:
                     unlocked_doors = any(not door.locked for door in self.current_room.doors)
                     if unlocked_doors:
