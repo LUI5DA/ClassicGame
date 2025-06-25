@@ -350,6 +350,30 @@ class Player:
         else:
             pygame.draw.rect(screen, color, (self.x, self.y, self.width, self.height))
             
+        # Draw attack effect when attacking
+        if self.attack_timer > 15:  # Only during attack frames
+            attack_color = RED
+            if self.facing_direction == 1:  # Right
+                attack_rect = pygame.Rect(self.x + self.width, self.y, self.attack_range, self.height)
+                # Draw attack effect
+                pygame.draw.rect(screen, attack_color, attack_rect, 2)
+                # Draw direction indicator
+                pygame.draw.polygon(screen, attack_color, [
+                    (self.x + self.width + 10, self.y + self.height//2 - 10),
+                    (self.x + self.width + 25, self.y + self.height//2),
+                    (self.x + self.width + 10, self.y + self.height//2 + 10)
+                ])
+            else:  # Left
+                attack_rect = pygame.Rect(self.x - self.attack_range, self.y, self.attack_range, self.height)
+                # Draw attack effect
+                pygame.draw.rect(screen, attack_color, attack_rect, 2)
+                # Draw direction indicator
+                pygame.draw.polygon(screen, attack_color, [
+                    (self.x - 10, self.y + self.height//2 - 10),
+                    (self.x - 25, self.y + self.height//2),
+                    (self.x - 10, self.y + self.height//2 + 10)
+                ])
+            
         # Phase timer indicator
         if self.phase_timer > 0:
             timer_width = 40
@@ -822,7 +846,8 @@ class Enemy:
         self.y = y
         self.width = 20
         self.height = 20
-        self.speed = 1
+        # Faster enemies for higher difficulty
+        self.speed = 1.5 if enemy_type == "chaser" else 1
         self.color = RED
         self.type = enemy_type
         self.direction = random.choice([-1, 1])
@@ -919,6 +944,62 @@ class Enemy:
         self.damage_timer = 10
         return self.health <= 0
         
+class GlitchEnemy(Enemy):
+    def __init__(self, x, y):
+        super().__init__(x, y, "glitch")
+        self.color = GLITCH_PINK
+        self.health = 3
+        self.max_health = 3
+        self.speed = 2
+        self.teleport_timer = 0
+        
+    def update(self, walls, player):
+        if self.teleport_timer > 0:
+            self.teleport_timer -= 1
+            
+        distance = ((player.x - self.x)**2 + (player.y - self.y)**2)**0.5
+        
+        if distance < 150 and self.teleport_timer <= 0:
+            # Simple teleport near player
+            self.x = player.x + random.randint(-80, 80)
+            self.y = player.y + random.randint(-80, 80)
+            self.teleport_timer = 120
+            from audio import audio_manager
+            audio_manager.play_sound("glitch")
+            print("Glitch enemy teleported!")
+        else:
+            # Normal chase behavior
+            if player.x > self.x:
+                self.x += self.speed
+            elif player.x < self.x:
+                self.x -= self.speed
+            if player.y > self.y:
+                self.y += self.speed
+            elif player.y < self.y:
+                self.y -= self.speed
+                
+        if self.damage_timer > 0:
+            self.damage_timer -= 1
+            
+    def draw(self, screen):
+        color = GLITCH_PINK if random.randint(0, 3) == 0 else self.color
+        if self.damage_timer > 0:
+            color = WHITE
+            
+        pygame.draw.rect(screen, color, (self.x, self.y, self.width, self.height))
+        pygame.draw.circle(screen, RED, (int(self.x + 5), int(self.y + 5)), 2)
+        pygame.draw.circle(screen, RED, (int(self.x + 15), int(self.y + 5)), 2)
+        
+        # Pink health bar
+        bar_width = 30
+        bar_height = 4
+        bar_x = self.x - 5
+        bar_y = self.y - 15
+        
+        pygame.draw.rect(screen, (40, 40, 40), (bar_x, bar_y, bar_width, bar_height))
+        health_width = int((self.health / self.max_health) * bar_width)
+        pygame.draw.rect(screen, GLITCH_PINK, (bar_x, bar_y, health_width, bar_height))
+
 class Boss(Enemy):
     def __init__(self, x, y, boss_type="guardian"):
         super().__init__(x, y, boss_type)

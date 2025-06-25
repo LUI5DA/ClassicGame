@@ -49,6 +49,14 @@ class Game:
                     self.try_advance_room()
                 elif event.key == pygame.K_r and self.game_over:
                     self.__init__()
+            # Mouse controls
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if not self.player.inventory_open and not self.game_over:
+                    if event.button == 1:  # Left click to attack
+                        self.player.attack()
+                    elif event.button == 3:  # Right click to teleport
+                        if self.player.count_crystals('teleport') > 0:
+                            self.player.use_teleport_crystal()
     
     def update(self):
         if self.game_over:
@@ -178,6 +186,33 @@ class Game:
                         
     def check_combat(self):
         """Check for player attacks hitting enemies"""
+        # Update player facing direction based on closest enemy
+        all_enemies = self.current_room.enemies + self.current_room.bosses
+        if all_enemies:
+            closest_enemy = None
+            min_distance = float('inf')
+            player_center_x = self.player.x + self.player.width/2
+            player_center_y = self.player.y + self.player.height/2
+            
+            for enemy in all_enemies:
+                enemy_center_x = enemy.x + enemy.width/2
+                enemy_center_y = enemy.y + enemy.height/2
+                distance = ((player_center_x - enemy_center_x)**2 + 
+                           (player_center_y - enemy_center_y)**2)**0.5
+                
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_enemy = enemy
+            
+            if closest_enemy:
+                # Set facing direction based on closest enemy
+                enemy_center_x = closest_enemy.x + closest_enemy.width/2
+                if enemy_center_x > player_center_x:
+                    self.player.facing_direction = 1  # Face right
+                else:
+                    self.player.facing_direction = -1  # Face left
+        
+        # Normal attack processing
         attack_rect = self.player.get_attack_rect()
         if attack_rect:
             for enemy in self.current_room.enemies[:]:
@@ -398,7 +433,7 @@ class Game:
                 # Check door status for help text
                 near_door = any(hasattr(door, 'can_use') and door.can_use for door in self.current_room.doors if not door.locked)
                 if near_door:
-                    help_text = small_font.render(f"R: Enter Door | AD: Move | W/SPACE: Jump | Q: Phase | E: Teleport | X: Attack | I: Inventory", True, GREEN)
+                    help_text = small_font.render(f"R: Enter Door | AD: Move | W/SPACE: Jump | Q: Phase | LEFT CLICK: Attack | RIGHT CLICK: Teleport | I: Inventory", True, GREEN)
                 else:
                     unlocked_doors = any(not door.locked for door in self.current_room.doors)
                     if unlocked_doors:

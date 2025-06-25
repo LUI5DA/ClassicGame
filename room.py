@@ -153,14 +153,21 @@ class Room:
                 door_position = (x + TILE_SIZE, y + TILE_SIZE//2)
                 print(f"Forced door placement in room {self.id}")
         
-        # Place enemies strategically
-        enemy_count = min(1 + (self.id // 2), len(open_spaces) // 4)
+        # Place more enemies, especially in early levels
+        base_count = 3 if self.id < 3 else 2  # More enemies in early rooms
+        enemy_count = min(base_count + (self.id // 2), len(open_spaces) // 3)  # Increased enemy density
         enemy_positions = []
         if enemy_count > 0 and open_spaces:
             selected_positions = random.sample(open_spaces, min(enemy_count, len(open_spaces)))
             for i, (x, y) in enumerate(selected_positions):
-                enemy_type = "chaser" if i % 3 == 0 else "patrol"
-                self.enemies.append(Enemy(x, y, enemy_type))
+                if i == 0 and self.id >= 2:  # First enemy in room 2+ can be glitch
+                    from entities import GlitchEnemy
+                    self.enemies.append(GlitchEnemy(x, y))
+                    print(f"Spawned Glitch Enemy in room {self.id}")
+                else:
+                    # More chasers in early levels for higher difficulty
+                    enemy_type = "chaser" if (i % 2 == 0 or self.id < 3) else "patrol"
+                    self.enemies.append(Enemy(x, y, enemy_type))
                 enemy_positions.append((x, y))
                 open_spaces.remove((x, y))
         
