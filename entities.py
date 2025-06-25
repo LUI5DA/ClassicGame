@@ -98,6 +98,8 @@ class Player:
                 self.jump_count += 1
                 self.on_ground = False
                 self.can_jump = False
+                from audio import audio_manager
+                audio_manager.play_sound("jump")
                 
                 # Wall jump
                 if self.against_wall and not self.on_ground:
@@ -258,6 +260,8 @@ class Player:
         """Use teleport crystal from inventory"""
         if self.inventory['teleport_crystals'] > 0 and self.teleport_cooldown <= 0:
             self.inventory['teleport_crystals'] -= 1
+            from audio import audio_manager
+            audio_manager.play_sound("teleport")
             teleport_distance = 80
             
             # Determine direction based on velocity or default to right
@@ -293,6 +297,8 @@ class Player:
         """Use phase crystal from inventory"""
         if self.inventory['phase_crystals'] > 0:
             self.inventory['phase_crystals'] -= 1
+            from audio import audio_manager
+            audio_manager.play_sound("phase")
             self.phase_timer = 120  # 2 seconds
             self.glitch_timer = 30
             

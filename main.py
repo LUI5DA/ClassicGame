@@ -105,6 +105,7 @@ class Game:
             enemy_rect = pygame.Rect(enemy.x, enemy.y, enemy.width, enemy.height)
             if player_rect.colliderect(enemy_rect):
                 if self.player.take_damage():
+                    audio_manager.play_sound("damage")
                     if self.player.health <= 0:
                         self.game_over = True
                         
@@ -113,6 +114,7 @@ class Game:
         for rock in self.current_room.falling_rocks:
             if rock.active and player_rect.colliderect(rock.get_rect()):
                 if self.player.take_damage():
+                    audio_manager.play_sound("damage")
                     if self.player.health <= 0:
                         self.game_over = True
                         
@@ -127,6 +129,7 @@ class Game:
                     print(f"Hit enemy! Damage: {weapon_stats['damage']}, Enemy health: {enemy.health}")
                     if enemy.take_damage(weapon_stats["damage"]):
                         print("Enemy killed!")
+                        audio_manager.play_sound("beat")  # Enemy death sound
                         self.current_room.enemies.remove(enemy)
                         self.score += 5  # Bonus points for killing enemies
                         

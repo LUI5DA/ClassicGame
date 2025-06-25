@@ -15,15 +15,27 @@ class AudioManager:
             sound = pygame.mixer.Sound(filename)
             sound.set_volume(self.sfx_volume)
             self.sounds[name] = sound
-        except:
+            print(f"Loaded sound: {name} from {filename}")
+        except Exception as e:
+            print(f"Failed to load sound {name} from {filename}: {e}")
             # Create placeholder sound if file doesn't exist
             self.sounds[name] = None
             
     def play_sound(self, name):
         """Play a sound effect"""
+        print(f"Trying to play sound: {name}")
+        # Check if we have a direct sound file
         if name in self.sounds and self.sounds[name]:
+            print(f"Playing direct sound: {name}")
             self.sounds[name].play()
+        # Check if we have a mapped sound
+        elif hasattr(self, 'sound_mapping') and name in self.sound_mapping:
+            mapped_sound = self.sound_mapping[name]
+            print(f"Using mapped sound: {name} -> {mapped_sound}")
+            if mapped_sound in self.sounds and self.sounds[mapped_sound]:
+                self.sounds[mapped_sound].play()
         else:
+            print(f"No sound found for: {name}, generating beep")
             # Generate simple beep sound programmatically
             self.generate_beep(name)
             
@@ -100,19 +112,55 @@ class AudioManager:
             # Fallback if numpy not available
             pass
             
+    def load_background_music(self, filename):
+        """Load and start background music"""
+        try:
+            pygame.mixer.music.load(filename)
+            pygame.mixer.music.set_volume(0.3)  # Low volume
+            pygame.mixer.music.play(-1)  # Loop indefinitely
+            print(f"Background music loaded and started: {filename}")
+        except Exception as e:
+            print(f"Failed to load background music {filename}: {e}")
+            
+    def set_music_volume(self, volume):
+        """Set background music volume (0.0 to 1.0)"""
+        self.music_volume = volume
+        pygame.mixer.music.set_volume(volume)
+        
+    def stop_music(self):
+        """Stop background music"""
+        pygame.mixer.music.stop()
+        
+    def pause_music(self):
+        """Pause background music"""
+        pygame.mixer.music.pause()
+        
+    def resume_music(self):
+        """Resume background music"""
+        pygame.mixer.music.unpause()
+            
     def load_all_sounds(self):
         """Load all game sounds from files or generate them"""
         sound_files = {
-            "jump": "sounds/jump.wav",
-            "attack": "sounds/attack.wav", 
-            "crystal": "sounds/crystal.wav",
-            "teleport": "sounds/teleport.wav",
-            "phase": "sounds/phase.wav",
-            "damage": "sounds/damage.wav"
+            "jump": "jump.wav",
+            "crystal": "crystal.wav", 
+            "glitch": "glitch.wav",
+            "beat": "beat.wav"
         }
         
         for name, filename in sound_files.items():
             self.load_sound(name, filename)
+            
+        # Load and start background music
+        self.load_background_music("bg_sound.wav")
+            
+        # Map sounds to game actions
+        self.sound_mapping = {
+            "attack": "beat",
+            "teleport": "glitch", 
+            "phase": "glitch",
+            "damage": "beat"
+        }
 
 # Global audio manager instance
 audio_manager = AudioManager()
