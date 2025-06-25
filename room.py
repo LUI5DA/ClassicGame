@@ -15,6 +15,7 @@ class Room:
         self.doors = []
         self.falling_rocks = []
         self.moving_platforms = []
+        self.bosses = []
         self.generate_room()
         
     def generate_room(self):
@@ -155,6 +156,10 @@ class Room:
                     door_placed = True
                 attempts += 1
                 
+        # Add boss to certain rooms
+        if self.id % 3 == 2:  # Every 3rd room has a boss
+            self.add_boss()
+            
         # Place falling rocks and moving platforms
         if self.id > 1:
             for _ in range(random.randint(1, 3)):
@@ -173,6 +178,30 @@ class Room:
                 
                 if not collision:
                     self.moving_platforms.append(MovingPlatform(x, y, TILE_SIZE * 4))
+                    
+    def add_boss(self):
+        """Add a boss to the room"""
+        # Find open area for boss
+        for attempt in range(20):
+            x = random.randint(5, CAVE_WIDTH - 10)
+            y = random.randint(5, CAVE_HEIGHT - 10)
+            
+            # Check if area is clear (3x3 area)
+            clear = True
+            for dy in range(-1, 2):
+                for dx in range(-1, 2):
+                    if self.cave_map[y + dy][x + dx]:
+                        clear = False
+                        break
+                if not clear:
+                    break
+                    
+            if clear:
+                world_x = x * TILE_SIZE
+                world_y = y * TILE_SIZE
+                from entities import Boss
+                self.bosses.append(Boss(world_x, world_y))
+                break
                 
     def get_all_walls(self):
         all_walls = self.walls[:]
@@ -219,3 +248,5 @@ class Room:
             rock.draw(screen)
         for platform in self.moving_platforms:
             platform.draw(screen)
+        for boss in self.bosses:
+            boss.draw(screen)

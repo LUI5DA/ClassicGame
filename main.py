@@ -57,6 +57,8 @@ class Game:
             key.update()
         for enemy in self.current_room.enemies:
             enemy.update(self.current_room.walls, self.player)
+        for boss in self.current_room.bosses:
+            boss.update(self.current_room.walls, self.player)
         for rock in self.current_room.falling_rocks:
             rock.update(self.current_room.walls, self.player)
         for platform in self.current_room.moving_platforms:
@@ -69,6 +71,8 @@ class Game:
         self.check_enemy_collisions()
         self.check_falling_rock_collisions()
         self.check_combat()
+        self.check_boss_combat()
+        self.check_projectile_collisions()
                         
     def check_crystal_collection(self):
         player_rect = pygame.Rect(self.player.x, self.player.y, self.player.width, self.player.height)
@@ -133,6 +137,33 @@ class Game:
                         self.current_room.enemies.remove(enemy)
                         self.score += 5  # Bonus points for killing enemies
                         
+    def check_boss_combat(self):
+        """Check for player attacks hitting bosses"""
+        attack_rect = self.player.get_attack_rect()
+        if attack_rect:
+            for boss in self.current_room.bosses[:]:
+                boss_rect = pygame.Rect(boss.x, boss.y, boss.width, boss.height)
+                if attack_rect.colliderect(boss_rect):
+                    weapon_stats = self.player.get_weapon_stats()
+                    print(f"Hit boss! Damage: {weapon_stats['damage']}, Boss health: {boss.health}")
+                    if boss.take_damage(weapon_stats["damage"]):
+                        print("Boss defeated!")
+                        audio_manager.play_sound("glitch")  # Special boss death sound
+                        self.current_room.bosses.remove(boss)
+                        self.score += 50  # Big bonus for boss kill
+                        
+    def check_projectile_collisions(self):
+        """Check boss projectiles hitting player"""
+        player_rect = pygame.Rect(self.player.x, self.player.y, self.player.width, self.player.height)
+        for boss in self.current_room.bosses:
+            for projectile in boss.projectiles[:]:
+                if player_rect.colliderect(projectile.get_rect()):
+                    if self.player.take_damage():
+                        audio_manager.play_sound("damage")
+                        boss.projectiles.remove(projectile)
+                        if self.player.health <= 0:
+                            self.game_over = True
+                        
     def find_safe_spawn_point(self):
         open_spaces = []
         for y in range(3, CAVE_HEIGHT - 3):
@@ -196,6 +227,10 @@ class Game:
             
         # Draw room objects
         self.current_room.draw_objects(temp_surface)
+        
+        # Draw bosses
+        for boss in self.current_room.bosses:
+            boss.draw(temp_surface)
             
         # Draw player
         self.player.draw(temp_surface)

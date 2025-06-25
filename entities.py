@@ -355,6 +355,9 @@ class Player:
         """Perform melee attack"""
         if self.attack_timer <= 0:
             self.attack_timer = 20  # Attack cooldown
+            print(f"Player attacks with {self.weapon}!")
+            from audio import audio_manager
+            audio_manager.play_sound("attack")
             return True
         return False
         
@@ -445,32 +448,162 @@ class Enemy:
         # Update damage timer
         if self.damage_timer > 0:
             self.damage_timer -= 1
-                    
+            
     def draw(self, screen):
-        # Flash red when damaged
+        # Flash when damaged
         color = WHITE if self.damage_timer > 0 else self.color
         pygame.draw.rect(screen, color, (self.x, self.y, self.width, self.height))
         pygame.draw.circle(screen, WHITE, (int(self.x + 5), int(self.y + 5)), 2)
         pygame.draw.circle(screen, WHITE, (int(self.x + 15), int(self.y + 5)), 2)
         
-        # Health bar
-        if self.health < self.max_health:
-            bar_width = self.width
-            bar_height = 3
-            bar_x = self.x
-            bar_y = self.y - 8
-            
-            # Background
-            pygame.draw.rect(screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
-            # Health
-            health_width = int((self.health / self.max_health) * bar_width)
-            pygame.draw.rect(screen, RED, (bar_x, bar_y, health_width, bar_height))
-            
+        # Always show health bar above enemy
+        bar_width = 30
+        bar_height = 4
+        bar_x = self.x - 5
+        bar_y = self.y - 12
+        
+        # Background (dark gray)
+        pygame.draw.rect(screen, (40, 40, 40), (bar_x, bar_y, bar_width, bar_height))
+        # Health (green to red based on health)
+        health_width = int((self.health / self.max_health) * bar_width)
+        if self.health > 1:
+            health_color = GREEN
+        else:
+            health_color = RED
+        pygame.draw.rect(screen, health_color, (bar_x, bar_y, health_width, bar_height))
+        
+        # Health text
+        font = pygame.font.Font(None, 16)
+        health_text = font.render(f"{self.health}/{self.max_health}", True, WHITE)
+        screen.blit(health_text, (bar_x, bar_y - 15))
+        
     def take_damage(self, damage):
         """Take damage and return True if enemy dies"""
         self.health -= damage
         self.damage_timer = 10
         return self.health <= 0
+        
+class Boss(Enemy):
+    def __init__(self, x, y, boss_type="guardian"):
+        super().__init__(x, y, boss_type)
+        self.width = 40
+        self.height = 40
+        self.health = 8
+        self.max_health = 8
+        self.speed = 0.5
+        self.color = (150, 0, 150)  # Purple
+        self.attack_timer = 0
+        self.special_timer = 0
+        self.phase = 1
+        self.projectiles = []
+        
+    def update(self, walls, player):
+        # Boss AI phases
+        if self.health > 6:  # Phase 1: Slow chase
+            self.chase_player(player)
+        elif self.health > 3:  # Phase 2: Projectile attacks
+            self.projectile_attack(player)
+        else:  # Phase 3: Aggressive rush
+            self.aggressive_attack(player)
+            
+        # Update projectiles
+        for projectile in self.projectiles[:]:
+            projectile.update()
+            if projectile.x < 0 or projectile.x > SCREEN_WIDTH or projectile.y < 0 or projectile.y > SCREEN_HEIGHT:
+                self.projectiles.remove(projectile)
+                
+        # Update timers
+        if self.attack_timer > 0:
+            self.attack_timer -= 1
+        if self.special_timer > 0:
+            self.special_timer -= 1
+        if self.damage_timer > 0:
+            self.damage_timer -= 1
+            
+    def chase_player(self, player):
+        if abs(player.x - self.x) < 200 and abs(player.y - self.y) < 200:
+            if player.x > self.x:
+                self.x += self.speed
+            elif player.x < self.x:
+                self.x -= self.speed
+            if player.y > self.y:
+                self.y += self.speed
+            elif player.y < self.y:
+                self.y -= self.speed
+                
+    def projectile_attack(self, player):
+        if self.attack_timer <= 0:
+            # Shoot projectile at player
+            dx = player.x - self.x
+            dy = player.y - self.y
+            distance = math.sqrt(dx*dx + dy*dy)
+            if distance > 0:
+                proj_speed = 3
+                proj_dx = (dx / distance) * proj_speed
+                proj_dy = (dy / distance) * proj_speed
+                self.projectiles.append(Projectile(self.x + self.width//2, self.y + self.height//2, proj_dx, proj_dy))
+                self.attack_timer = 60
+                
+    def aggressive_attack(self, player):
+        # Fast chase in final phase
+        if abs(player.x - self.x) < 300 and abs(player.y - self.y) < 300:
+            chase_speed = self.speed * 2
+            if player.x > self.x:
+                self.x += chase_speed
+            elif player.x < self.x:
+                self.x -= chase_speed
+            if player.y > self.y:
+                self.y += chase_speed
+            elif player.y < self.y:
+                self.y -= chase_speed
+                
+    def draw(self, screen):
+        # Flash when damaged
+        color = WHITE if self.damage_timer > 0 else self.color
+        pygame.draw.rect(screen, color, (self.x, self.y, self.width, self.height))
+        
+        # Boss eyes
+        pygame.draw.circle(screen, RED, (int(self.x + 10), int(self.y + 10)), 4)
+        pygame.draw.circle(screen, RED, (int(self.x + 30), int(self.y + 10)), 4)
+        
+        # Health bar (always visible for boss)
+        bar_width = 60
+        bar_height = 6
+        bar_x = self.x - 10
+        bar_y = self.y - 15
+        
+        pygame.draw.rect(screen, (40, 40, 40), (bar_x, bar_y, bar_width, bar_height))
+        health_width = int((self.health / self.max_health) * bar_width)
+        if self.health > 4:
+            health_color = GREEN
+        elif self.health > 2:
+            health_color = YELLOW
+        else:
+            health_color = RED
+        pygame.draw.rect(screen, health_color, (bar_x, bar_y, health_width, bar_height))
+        
+        # Draw projectiles
+        for projectile in self.projectiles:
+            projectile.draw(screen)
+            
+class Projectile:
+    def __init__(self, x, y, vel_x, vel_y):
+        self.x = x
+        self.y = y
+        self.vel_x = vel_x
+        self.vel_y = vel_y
+        self.size = 6
+        
+    def update(self):
+        self.x += self.vel_x
+        self.y += self.vel_y
+        
+    def draw(self, screen):
+        pygame.draw.circle(screen, YELLOW, (int(self.x), int(self.y)), self.size)
+        pygame.draw.circle(screen, RED, (int(self.x), int(self.y)), self.size - 2)
+        
+    def get_rect(self):
+        return pygame.Rect(self.x - self.size, self.y - self.size, self.size * 2, self.size * 2)
 
 class Key:
     def __init__(self, x, y):
