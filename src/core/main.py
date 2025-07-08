@@ -1,10 +1,15 @@
 import pygame
 import sys
 import random
+import os
+
+# Add parent directory to path so we can import from other modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from config import *
-from entities import Player
-from room import Room
-from audio import audio_manager
+from entities.entities import Player
+from entities.room import Room
+from ui.audio import audio_manager
 
 class Game:
     def __init__(self):
@@ -16,7 +21,11 @@ class Game:
         
         # Load background image
         try:
-            self.background = pygame.image.load("bg.png")
+            import os
+            # Get path relative to project root
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            bg_path = os.path.join(project_root, "assets", "images", "bg.png")
+            self.background = pygame.image.load(bg_path)
             self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
             print("Background image loaded successfully")
         except:

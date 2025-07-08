@@ -149,10 +149,15 @@ class AudioManager:
         }
         
         for name, filename in sound_files.items():
-            self.load_sound(name, filename)
+            # Get path relative to project root
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            asset_path = os.path.join(project_root, "assets", "audio", filename)
+            self.load_sound(name, asset_path)
             
         # Load and start background music
-        self.load_background_music("bg_sound.wav")
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        bg_music_path = os.path.join(project_root, "assets", "audio", "bg_sound.wav")
+        self.load_background_music(bg_music_path)
             
         # Map sounds to game actions
         self.sound_mapping = {

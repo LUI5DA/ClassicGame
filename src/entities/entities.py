@@ -1,20 +1,35 @@
 import pygame
 import random
 import math
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import *
 
 class Player:
+    # Class variables for shared sprite images
+    stand_sprites = []
+    move_sprites = []
+    sprites_loaded = False
+    
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.width = 24
-        self.height = 24
+        self.width = 32
+        self.height = 32
         self.speed = 5
         self.color = GREEN
         self.glitch_timer = 0
         self.health = 3
         self.invulnerable_timer = 0
         self.keys = 0
+        
+        # Animation properties
+        self.current_frame = 0
+        self.animation_timer = 0
+        self.animation_speed = 8  # Frames per sprite change
+        self.facing_right = True
+        self.is_moving = False
         
         # Physics properties
         self.vel_x = 0
@@ -40,12 +55,7 @@ class Player:
         self.crafting_mode = False
         self.selected_slot = 0
         
-        # Add starting crystals to inventory
-        self.add_item({'type': 'crystal', 'subtype': 'phase', 'count': 2, 'name': 'Phase Crystal'})
-        self.add_item({'type': 'crystal', 'subtype': 'teleport', 'count': 2, 'name': 'Teleport Crystal'})
-        
         # Combat system
-        # Remove old weapon system - now handled by equipment
         self.attack_timer = 0
         self.attack_range = 35
         self.attack_damage = 1
@@ -54,6 +64,44 @@ class Player:
         # Power-up timers
         self.power_timer = 0
         self.shield_timer = 0
+        
+        # Load sprites if not already loaded
+        if not Player.sprites_loaded:
+            self.load_sprites()
+            
+        # Add starting crystals to inventory
+        self.add_item({'type': 'crystal', 'subtype': 'phase', 'count': 2, 'name': 'Phase Crystal'})
+        self.add_item({'type': 'crystal', 'subtype': 'teleport', 'count': 2, 'name': 'Teleport Crystal'})
+            
+    def load_sprites(self):
+        """Load all player sprite animations"""
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            
+            # Load stand up sprites
+            stand_path = os.path.join(project_root, "assets", "images", "Kalthira", "Stand_up")
+            for i in range(12):
+                sprite_file = f"sprite_{i:02d}.png"
+                sprite_path = os.path.join(stand_path, sprite_file)
+                sprite = pygame.image.load(sprite_path)
+                sprite = pygame.transform.scale(sprite, (120, 120))
+                Player.stand_sprites.append(sprite)
+            
+            # Load move sprites
+            move_path = os.path.join(project_root, "assets", "images", "Kalthira", "Move")
+            for i in range(12):
+                sprite_file = f"sprite_{i:02d}.png"
+                sprite_path = os.path.join(move_path, sprite_file)
+                sprite = pygame.image.load(sprite_path)
+                sprite = pygame.transform.scale(sprite, (self.width, self.height))
+                Player.move_sprites.append(sprite)
+            
+            Player.sprites_loaded = True
+            print(f"Loaded {len(Player.stand_sprites)} stand sprites and {len(Player.move_sprites)} move sprites")
+            
+        except Exception as e:
+            print(f"Failed to load player sprites: {e}")
+            Player.sprites_loaded = False
         
     def update(self, keys, walls):
         # Inventory toggle (always available)
@@ -171,7 +219,7 @@ class Player:
                 self.jump_count += 1
                 self.on_ground = False
                 self.can_jump = False
-                from audio import audio_manager
+                from ui.audio import audio_manager
                 audio_manager.play_sound("jump")
                 
                 # Wall jump
@@ -319,36 +367,102 @@ class Player:
             else:
                 self._craft2_pressed = False
             
-        # Update facing direction based on movement
+        # Update facing direction and movement state
         if self.vel_x > 0:
             self.facing_direction = 1
+            self.facing_right = True
+            self.is_moving = True
         elif self.vel_x < 0:
             self.facing_direction = -1
+            self.facing_right = False
+            self.is_moving = True
+        else:
+            self.is_moving = False
+            
+        # Update animation
+        self.update_animation()
+        
+    def update_animation(self):
+        """Update sprite animation"""
+        if not Player.sprites_loaded:
+            return
+            
+        # Update animation timer
+        self.animation_timer += 1
+        
+        # Change frame when timer reaches animation speed
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            
+            # Choose sprite set based on movement
+            if self.is_moving:
+                sprite_count = len(Player.move_sprites)
+            else:
+                sprite_count = len(Player.stand_sprites)
+            
+            # Advance to next frame
+            self.current_frame = (self.current_frame + 1) % sprite_count
     
     def draw(self, screen):
-        color = self.color
-        alpha = 255
-        
-        if self.phase_timer > 0:
-            color = GLITCH_PINK
-            alpha = 128  # Semi-transparent when phasing
-        elif self.glitch_timer > 0:
-            color = GLITCH_GREEN if random.randint(0, 3) == 0 else self.color
-        elif self.invulnerable_timer > 0 and self.invulnerable_timer % 10 < 5:
-            color = WHITE
-        elif self.against_wall and not self.on_ground:
-            color = BLUE  # Visual feedback for wall sliding
-        
-        # Draw player with transparency if phasing
-        if alpha < 255:
-            temp_surface = pygame.Surface((self.width, self.height))
-            temp_surface.set_alpha(alpha)
-            temp_surface.fill(color)
-            screen.blit(temp_surface, (self.x, self.y))
-            # Add phase effect border
-            pygame.draw.rect(screen, GLITCH_PINK, (self.x - 2, self.y - 2, self.width + 4, self.height + 4), 2)
+        # Draw sprite if loaded, otherwise fallback to colored rectangle
+        if Player.sprites_loaded:
+            # Choose sprite set based on movement
+            if self.is_moving:
+                current_sprite = Player.move_sprites[self.current_frame]
+            else:
+                current_sprite = Player.stand_sprites[self.current_frame]
+            
+            # Flip sprite if facing left
+            if not self.facing_right:
+                current_sprite = pygame.transform.flip(current_sprite, True, False)
+            
+            # Apply effects
+            sprite_to_draw = current_sprite
+            
+            if self.phase_timer > 0:
+                # Semi-transparent when phasing
+                sprite_to_draw = current_sprite.copy()
+                sprite_to_draw.set_alpha(128)
+                # Add phase effect border
+                pygame.draw.rect(screen, GLITCH_PINK, (self.x - 2, self.y - 2, self.width + 4, self.height + 4), 2)
+            elif self.glitch_timer > 0:
+                # Glitch effect - randomly tint sprite
+                if random.randint(0, 3) == 0:
+                    sprite_to_draw = current_sprite.copy()
+                    sprite_to_draw.fill(GLITCH_GREEN, special_flags=pygame.BLEND_MULT)
+            elif self.invulnerable_timer > 0 and self.invulnerable_timer % 10 < 5:
+                # Flash white when invulnerable
+                sprite_to_draw = current_sprite.copy()
+                sprite_to_draw.fill((255, 255, 255, 128), special_flags=pygame.BLEND_RGBA_MULT)
+            
+            # Draw the sprite
+            screen.blit(sprite_to_draw, (self.x-50, self.y-70))
+            
         else:
-            pygame.draw.rect(screen, color, (self.x, self.y, self.width, self.height))
+            # Fallback to colored rectangle
+            color = self.color
+            alpha = 255
+            
+            if self.phase_timer > 0:
+                color = GLITCH_PINK
+                alpha = 128  # Semi-transparent when phasing
+            elif self.glitch_timer > 0:
+                color = GLITCH_GREEN if random.randint(0, 3) == 0 else self.color
+            elif self.invulnerable_timer > 0 and self.invulnerable_timer % 10 < 5:
+                color = WHITE
+            elif self.against_wall and not self.on_ground:
+                color = BLUE  # Visual feedback for wall sliding
+            
+            # Draw player with transparency if phasing
+            if alpha < 255:
+                temp_surface = pygame.Surface((self.width, self.height))
+                temp_surface.set_alpha(alpha)
+                temp_surface.fill(color)
+                screen.blit(temp_surface, (self.x, self.y))
+                # Add phase effect border
+                pygame.draw.rect(screen, GLITCH_PINK, (self.x - 2, self.y - 2, self.width + 4, self.height + 4), 2)
+            else:
+                pygame.draw.rect(screen, color, (self.x, self.y, self.width, self.height))
             
         # Draw attack effect when attacking
         if self.attack_timer > 15:  # Only during attack frames
@@ -445,7 +559,7 @@ class Player:
     def use_teleport_crystal(self):
         """Use teleport crystal from inventory"""
         if self.consume_crystal('teleport') and self.teleport_cooldown <= 0:
-            from audio import audio_manager
+            from ui.audio import audio_manager
             audio_manager.play_sound("teleport")
             teleport_distance = 80
             
@@ -481,7 +595,7 @@ class Player:
     def use_teleport_crystal_directed(self, dx, dy):
         """Use teleport crystal in a specific direction (for mouse control)"""
         if self.consume_crystal('teleport') and self.teleport_cooldown <= 0:
-            from audio import audio_manager
+            from ui.audio import audio_manager
             audio_manager.play_sound("teleport")
             
             # Calculate target position
@@ -501,7 +615,7 @@ class Player:
     def use_phase_crystal(self):
         """Use phase crystal from inventory"""
         if self.consume_crystal('phase'):
-            from audio import audio_manager
+            from ui.audio import audio_manager
             audio_manager.play_sound("phase")
             self.phase_timer = 120  # 2 seconds
             self.glitch_timer = 30
@@ -515,7 +629,7 @@ class Player:
             power_crystal = {'type': 'crystal', 'subtype': 'power', 'count': 1, 'name': 'Power Crystal'}
             self.add_item(power_crystal)
             print("Crafted Power Crystal! (Double damage for 10 seconds)")
-            from audio import audio_manager
+            from ui.audio import audio_manager
             audio_manager.play_sound("crystal")
         else:
             print("Need: 2 Glitch + 1 Teleport crystals")
@@ -529,7 +643,7 @@ class Player:
             shield_crystal = {'type': 'crystal', 'subtype': 'shield', 'count': 1, 'name': 'Shield Crystal'}
             self.add_item(shield_crystal)
             print("Crafted Shield Crystal! (Invulnerability for 5 seconds)")
-            from audio import audio_manager
+            from ui.audio import audio_manager
             audio_manager.play_sound("crystal")
         else:
             print("Need: 2 Glitch + 1 Phase crystals")
@@ -539,7 +653,7 @@ class Player:
         if self.consume_crystal('power'):
             self.power_timer = 600  # 10 seconds
             print("Power Crystal activated! Double damage for 10 seconds!")
-            from audio import audio_manager
+            from ui.audio import audio_manager
             audio_manager.play_sound("glitch")
             
     def use_shield_crystal(self):
@@ -547,7 +661,7 @@ class Player:
         if self.consume_crystal('shield'):
             self.shield_timer = 300  # 5 seconds
             print("Shield Crystal activated! Invulnerable for 5 seconds!")
-            from audio import audio_manager
+            from ui.audio import audio_manager
             audio_manager.play_sound("glitch")
             
     def count_crystals(self, crystal_type):
@@ -721,7 +835,7 @@ class Player:
                 
             weapon_name = self.equipment['weapon']['name'] if self.equipment['weapon'] else 'Fists'
             print(f"Player attacks with {weapon_name}!")
-            from audio import audio_manager
+            from ui.audio import audio_manager
             audio_manager.play_sound("attack")
             return True
         return False
@@ -848,7 +962,10 @@ class Crystal:
         # Load images if not already loaded
         if Crystal.crystal_image is None:
             try:
-                Crystal.crystal_image = pygame.image.load("crystal.png")
+                # Get path relative to project root
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                crystal_path = os.path.join(project_root, "assets", "images", "crystal.png")
+                Crystal.crystal_image = pygame.image.load(crystal_path)
                 Crystal.crystal_image = pygame.transform.scale(Crystal.crystal_image, (80, 80))
                 print("Crystal image loaded")
             except:
@@ -857,7 +974,8 @@ class Crystal:
                 
         if Crystal.glitch_crystal_image is None:
             try:
-                Crystal.glitch_crystal_image = pygame.image.load("gllitch_crystal.png")
+                glitch_crystal_path = os.path.join(project_root, "assets", "images", "gllitch_crystal.png")
+                Crystal.glitch_crystal_image = pygame.image.load(glitch_crystal_path)
                 Crystal.glitch_crystal_image = pygame.transform.scale(Crystal.glitch_crystal_image, (80, 80))
                 print("Glitch crystal image loaded")
             except:
@@ -910,7 +1028,9 @@ class Enemy:
         # Load enemy image if not already loaded
         if Enemy.enemy_image is None:
             try:
-                Enemy.enemy_image = pygame.image.load("beatle.png")
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                enemy_path = os.path.join(project_root, "assets", "images", "beatle.png")
+                Enemy.enemy_image = pygame.image.load(enemy_path)
                 Enemy.enemy_image = pygame.transform.scale(Enemy.enemy_image, (120, 120))
                 print("Enemy image loaded")
             except:
@@ -1015,7 +1135,7 @@ class GlitchEnemy(Enemy):
             self.x = player.x + random.randint(-80, 80)
             self.y = player.y + random.randint(-80, 80)
             self.teleport_timer = 120
-            from audio import audio_manager
+            from ui.audio import audio_manager
             audio_manager.play_sound("glitch")
             print("Glitch enemy teleported!")
         else:

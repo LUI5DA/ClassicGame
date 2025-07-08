@@ -1,8 +1,14 @@
 import pygame
 import random
+import sys
+import os
+
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from config import *
-from entities import Crystal, Enemy, Key, Door, FallingRock, MovingPlatform
-from cave_generator import CaveGenerator, CaveParameters
+from entities.entities import Crystal, Enemy, Key, Door, FallingRock, MovingPlatform, GlitchEnemy, Boss
+from generators.cave_generator import CaveGenerator, CaveParameters
 
 class Room:
     def __init__(self, room_id):
@@ -16,6 +22,31 @@ class Room:
         self.falling_rocks = []
         self.moving_platforms = []
         self.bosses = []
+        
+        # Load wall texture
+        try:
+            # Get path relative to project root
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            wall_texture_path = os.path.join(project_root, "assets", "images", "stone.jpg")
+            self.wall_texture = pygame.image.load(wall_texture_path)
+            self.wall_texture = pygame.transform.scale(self.wall_texture, (TILE_SIZE, TILE_SIZE))
+            
+            # Create rotated versions of the texture
+            self.wall_textures = [
+                self.wall_texture,  # Original (0 degrees)
+                pygame.transform.rotate(self.wall_texture, 90),  # 90 degrees
+                pygame.transform.rotate(self.wall_texture, 180),  # 180 degrees
+                pygame.transform.rotate(self.wall_texture, 270)   # 270 degrees
+            ]
+            
+            # Generate random rotation map for each tile
+            self.wall_rotations = {}
+            print("Wall texture loaded successfully")
+        except Exception as e:
+            self.wall_texture = None
+            self.wall_textures = None
+            print(f"Could not load stone.jpg: {e}, using default wall colors")
+            
         self.generate_room()
         
     def generate_room(self):
@@ -32,12 +63,33 @@ class Room:
         # Convert cave map to wall rectangles
         self.rebuild_walls()
         
+        # Generate random rotations for wall tiles
+        self.generate_wall_rotations()
+        
         # Place game objects in open areas
         self.place_objects()
         
+    def generate_wall_rotations(self):
+        """Generate random rotations for each wall tile"""
+        if not hasattr(self, 'wall_textures') or not self.wall_textures:
+            return
+            
+        self.wall_rotations = {}
+        for y in range(CAVE_HEIGHT):
+            for x in range(CAVE_WIDTH):
+                if self.cave_map[y][x]:
+                    self.wall_rotations[(x, y)] = random.randint(0, 3)
+        
     def get_cave_parameters(self):
         """Generate cave parameters based on room ID for variety"""
-        room_type = self.id % 5
+        return CaveParameters(
+                cave_type="perlin",
+                noise_scale=0.08 + (self.id * 0.02),
+                noise_octaves=3,
+                room_size_preference=0.7,
+                vertical_bias=0.3 if self.id % 2 == 0 else -0.3
+            )
+        """ room_type = self.id % 5
         
         if room_type == 0:  # Cellular caves - organic, bubble-like
             return CaveParameters(
@@ -81,7 +133,7 @@ class Room:
                 vertical_bias=(self.id % 2) * 0.3,
                 smoothing_passes=2,
                 connectivity_strength=1.0
-            )
+            ) """
         
     def rebuild_walls(self):
         self.walls = []
@@ -161,7 +213,6 @@ class Room:
             selected_positions = random.sample(open_spaces, min(enemy_count, len(open_spaces)))
             for i, (x, y) in enumerate(selected_positions):
                 if i == 0 and self.id >= 2:  # First enemy in room 2+ can be glitch
-                    from entities import GlitchEnemy
                     self.enemies.append(GlitchEnemy(x, y))
                     print(f"Spawned Glitch Enemy in room {self.id}")
                 else:
@@ -231,7 +282,6 @@ class Room:
             if clear:
                 world_x = x * TILE_SIZE
                 world_y = y * TILE_SIZE
-                from entities import Boss
                 self.bosses.append(Boss(world_x, world_y))
                 break
                 
@@ -285,18 +335,29 @@ class Room:
                 rect = pygame.Rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
                 
                 if self.cave_map[y][x]:
-                    color_variation = (x + y) % 3
-                    if color_variation == 0:
-                        color = CAVE_WALL
-                    elif color_variation == 1:
-                        color = tuple(max(0, c - 20) for c in CAVE_WALL)
+                    if hasattr(self, 'wall_textures') and self.wall_textures:
+                        # Get or create random rotation for this tile
+                        tile_key = (x, y)
+                        if tile_key not in self.wall_rotations:
+                            self.wall_rotations[tile_key] = random.randint(0, 3)  # Random rotation index
+                            
+                        # Use randomly rotated wall texture
+                        rotation_index = self.wall_rotations[tile_key]
+                        screen.blit(self.wall_textures[rotation_index], rect)
                     else:
-                        color = CAVE_ACCENT
-                    pygame.draw.rect(screen, color, rect)
-                    
-                    if random.randint(0, 10) == 0:
-                        pygame.draw.line(screen, tuple(min(255, c + 30) for c in color), 
-                                       (rect.left, rect.top), (rect.right, rect.bottom), 1)
+                        # Fallback to colored walls
+                        color_variation = (x + y) % 3
+                        if color_variation == 0:
+                            color = CAVE_WALL
+                        elif color_variation == 1:
+                            color = tuple(max(0, c - 20) for c in CAVE_WALL)
+                        else:
+                            color = CAVE_ACCENT
+                        pygame.draw.rect(screen, color, rect)
+                        
+                        if random.randint(0, 10) == 0:
+                            pygame.draw.line(screen, tuple(min(255, c + 30) for c in color), 
+                                           (rect.left, rect.top), (rect.right, rect.bottom), 1)
                 # Don't draw cave floor - let background show through
                 # Only draw walls, leaving open areas transparent
             
